@@ -43,29 +43,36 @@ L’objectif : laisser le modèle (surtout les gros Qwen) faire le maximum de ra
 git clone https://github.com/nikodindon/NikoForge.git
 cd NikoForge
 
-2. Crée l’environnementbash
-
+### 2. Crée l'environnement
+```bash
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
 
-3. Lance llama-server (exemple avec tes params)bash
-
+### 3. Lance llama-server (exemple avec tes params)
+```bash
 ./llama-server -m /home/niko/models/Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf \
   -c 65536 --jinja --flash-attn on -ngl 999 \
   --cache-type-k q8_0 --cache-type-v q8_0 \
   -b 512 -ub 512 --threads 8 --threads-batch 6 \
   --kv-offload --mlock --port 8080 --host 0.0.0.0
+```
 
-4. ConfigureCopie config.example.json → config.json et ajuste le chemin si besoin. Utilisationbash
+### 4. Configure
+Copie `config.example.json` → `config.json` et ajuste le chemin si besoin.
 
+## Utilisation
+```bash
 python nikoforge.py "Crée-moi un dashboard React + FastAPI qui affiche les stats système en temps réel avec des graphiques beaux"
+```
 
-Ou en mode interactif :bash
-
+Ou en mode interactif :
+```bash
 python nikoforge.py --interactive
+```
 
- Structure du projet
+## Structure du projet
 
 NikoForge/
 ├── nikoforge.py          # Point d'entrée principal
@@ -81,23 +88,31 @@ NikoForge/
 ├── AGENTS.md             # Instructions pour les agents (très important)
 └── README.md
 
- PhilosophieMinimalisme : Moins de code = moins d’erreurs et meilleur raisonnement du modèle
-Puissance du modèle : On laisse Qwen3.6 faire le gros du travail
-Contrôle : Tout est auditable et modifiable
-Évolutif : Facile d’ajouter des skills ou des outils
+## Philosophie
 
-Roadmap (à venir)Mode "Projet multi-étapes" avec planning
-Auto-évaluation + critique loop améliorée
-Support des images/vision (si modèle multimodal)
-Interface web simple (Gradio / Streamlit)
-Intégration Hermes / Mnemo
-Système de "skills" avancé (fichiers Markdown)
+- **Minimalisme** : Moins de code = moins d'erreurs et meilleur raisonnement du modèle
+- **Puissance du modèle** : On laisse Qwen3.6 faire le gros du travail
+- **Contrôle** : Tout est auditable et modifiable
+- **Évolutif** : Facile d'ajouter des skills ou des outils
 
-Liens utilesPi.dev → Inspiration principale
-local-intent-coder → Ancêtre de ce projet
-Hermes → Écosystème global
+## Roadmap (à venir)
+
+- Mode "Projet multi-étapes" avec planning
+- Auto-évaluation + critique loop améliorée
+- Support des images/vision (si modèle multimodal)
+- Interface web simple (Gradio / Streamlit)
+- Intégration Hermes / Mnemo
+- Système de "skills" avancé (fichiers Markdown)
+
+## Liens utiles
+
+- **Pi.dev** → Inspiration principale
+- **local-intent-coder** → Ancêtre de ce projet
+- **Hermes** → Écosystème global
+
+---
 
 Créé avec passion par @nikodindon
 
-“Parce que le futur du coding doit tourner chez soi.”
+"Parce que le futur du coding doit tourner chez soi."
 
