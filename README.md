@@ -17,11 +17,14 @@ L’objectif : laisser le modèle (surtout les gros Qwen) faire le maximum de ra
 ## ✨ Fonctionnalités principales
 
 - **Langage naturel → Projet complet** (frontend, backend, fullstack, scripts, etc.)
+- **Format XML structuré** pour les outils (compatible avec les gros modèles de reasoning)
+- **Streaming en temps réel** des réponses du modèle
 - Utilisation de **llama-server** (OpenAI compatible)
-- Outils de base : `read`, `write`, `edit`, `bash` (comme Pi)
+- Outils de base : `read`, `write`, `edit`, `bash`, `list_files`
 - Boucle agent simple et robuste avec feedback
 - Gestion intelligente du contexte (compaction + résumé)
 - Support multi-fichiers et projets structurés
+- Parser intelligent XML regex pour extraire les outils
 - Très faible overhead (harness ultra-léger)
 - Intégration possible avec ton écosystème Hermes
 
@@ -42,6 +45,7 @@ L’objectif : laisser le modèle (surtout les gros Qwen) faire le maximum de ra
 ```bash
 git clone https://github.com/nikodindon/NikoForge.git
 cd NikoForge
+```
 
 ### 2. Crée l'environnement
 ```bash
@@ -147,28 +151,42 @@ Quand tu lances `python nikoforge.py "Ta tâche"` :
 
 ### Format des appels d'outils
 
-Le modèle répond avec ce format pour utiliser les outils :
+NikoForge utilise un format XML structuré pour les appels d'outils, inspiré de pi-dev et qwen-code. Ce format permet au modèle d'expliquer son processus de pensée tout en incluant les outils à exécuter.
 
-```
-[outil: nom_outil]
-paramètres...
-
-[outil: autre_outil]
-{"param": "valeur"}
+```xml
+<tool_calls>
+<tool name="write_file">
+<param name="path">hello.py</param>
+<param name="content">print('Hello NikoForge!')</param>
+</tool>
+</tool_calls>
 ```
 
 Exemple de réponse du modèle :
 ```
 Je vais créer le fichier hello.py. D'abord je vais vérifier le répertoire.
 
-[outil: list_files]
-{"path": "."}
+<tool_calls>
+<tool name="list_files">
+<param name="path">.</param>
+</tool>
+</tool_calls>
 
 Maintenant je crée le fichier.
 
-[outil: write_file]
-{"path": "hello.py", "content": "print('Hello NikoForge!')"}
+<tool_calls>
+<tool name="write_file">
+<param name="path">hello.py</param>
+<param name="content">print('Hello NikoForge!')</param>
+</tool>
+</tool_calls>
 ```
+
+**Pourquoi le format XML ?**
+- Le modèle peut expliquer son processus de pensée pendant des lignes sans bloquer l'exécution
+- Le parser regex extrait les outils même avec beaucoup de texte avant
+- Compatible avec les gros modèles de reasoning (Qwen3.6-35B, etc.)
+- Similaire à pi-dev/qwen-code
 
 ### Gestion du contexte
 
@@ -383,9 +401,26 @@ NikoForge/
 - Intégration Hermes / Mnemo
 - Système de "skills" avancé (fichiers Markdown)
 
+## 📝 Changelog
+
+### v2.0 - Format XML et Streaming
+- **Nouveau format XML pour les outils** (balises `<tool_calls>`, `<tool>`, `<param>`)
+- **Parser XML regex intelligent** qui extrait les outils même avec beaucoup de texte de réflexion
+- **Streaming en temps réel** des réponses du modèle (plus de blockage apparent)
+- Compatible avec les gros modèles de reasoning (Qwen3.6-35B, etc.)
+- Similaire à pi-dev/qwen-code dans son approche
+- Le modèle peut expliquer son processus de pensée sans bloquer l'exécution des outils
+
+### v1.0 - MVP
+- Implémentation de base avec outils read/write/edit/bash
+- Gestion du contexte avec compaction automatique
+- Mode interactif
+- Configuration flexible
+
 ## Liens utiles
 
 - **Pi.dev** → Inspiration principale
+- **QwenCode** → Format des outils
 - **local-intent-coder** → Ancêtre de ce projet
 - **Hermes** → Écosystème global
 
