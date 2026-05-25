@@ -1,0 +1,1 @@
+print('XML rocks!')

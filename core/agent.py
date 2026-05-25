@@ -153,40 +153,34 @@ class Agent:
             return None
 
     def _extract_tool_calls(self, response: str) -> list:
-        """Extrait les appels d'outils de la réponse"""
+        """Extrait les appels d'outils de la réponse (format XML)"""
+        import re
+
         tool_calls = []
 
-        # Format attendu: [outil: nom_outil]
-        # suivi de paramètres en JSON ou texte
-        lines = response.split('\n')
-        current_tool = None
-        params = []
+        # Chercher <tool_calls>...</tool_calls>
+        # Utilisation de regex pour capturer le contenu entre les balises
+        pattern = r'<tool_calls>(.*?)</tool_calls>'
+        matches = re.findall(pattern, response, re.DOTALL)
 
-        for line in lines:
-            line = line.strip()
+        for match in matches:
+            # Extraire chaque outil <tool name="...">...</tool>
+            tool_pattern = r'<tool name="([^"]+)">(.*?)</tool>'
+            tools = re.findall(tool_pattern, match, re.DOTALL)
 
-            # Détection d'appel d'outil
-            if line.startswith('[outil:') and line.endswith(']'):
-                # Sauvegarder l'outil précédent s'il y en a un
-                if current_tool:
-                    tool_calls.append({
-                        "name": current_tool,
-                        "params": "\n".join(params).strip()
-                    })
+            for name, content in tools:
+                # Extraire les paramètres <param name="...">...</param>
+                params = {}
+                param_pattern = r'<param name="([^"]+)">(.*?)</param>'
+                params_matches = re.findall(param_pattern, content, re.DOTALL)
 
-                # Nouvel outil
-                current_tool = line[7:-1].strip()
-                params = []
+                for param_name, param_value in params_matches:
+                    params[param_name] = param_value.strip()
 
-            elif current_tool:
-                params.append(line)
-
-        # Sauvegarder le dernier outil
-        if current_tool:
-            tool_calls.append({
-                "name": current_tool,
-                "params": "\n".join(params).strip()
-            })
+                tool_calls.append({
+                    "name": name,
+                    "params": params
+                })
 
         return tool_calls
 
@@ -230,42 +224,37 @@ class Agent:
 
         return result
 
-    def _execute_tool(self, tool_call: Dict[str, str]) -> ToolResult:
+    def _execute_tool(self, tool_call: Dict[str, Any]) -> ToolResult:
         """Exécute un outil"""
         tool_name = tool_call["name"]
-        params_str = tool_call["params"]
+        params = tool_call["params"]  # Maintenant c'est déjà un dict
 
         try:
-            # Parser les paramètres avec le nouveau parser
-            args = self._parse_tool_params(params_str)
-
             # Router vers le bon outil
             if tool_name == "read_file":
-                path = args.get("path") or args.get("raw")
+                path = params.get("path") or params.get("raw")
                 if not path:
                     return ToolResult(False, None, "Paramètre 'path' manquant")
                 return self.tools.read_file(path)
 
             elif tool_name == "write_file":
-                path = args.get("path")
-                content = args.get("content") or args.get("raw")
+                path = params.get("path")
+                content = params.get("content") or params.get("raw") or ""
                 if not path:
                     return ToolResult(False, None, "Paramètre 'path' manquant")
-                if content is None:
-                    content = ""
                 return self.tools.write_file(path, content)
 
             elif tool_name == "edit_file":
-                path = args.get("path")
-                old_content = args.get("old_content")
-                new_content = args.get("new_content")
+                path = params.get("path")
+                old_content = params.get("old_content")
+                new_content = params.get("new_content")
                 if not all([path, old_content, new_content]):
                     return ToolResult(False, None, "Paramètres manquants pour edit_file")
                 return self.tools.edit_file(path, old_content, new_content)
 
             elif tool_name == "bash":
-                command = args.get("command") or args.get("raw")
-                timeout = args.get("timeout") or self.config["agent"]["tool_timeout"]
+                command = params.get("command") or params.get("raw")
+                timeout = params.get("timeout") or self.config["agent"]["tool_timeout"]
                 # Convertir timeout en int si c'est une string
                 if isinstance(timeout, str):
                     try:
@@ -277,7 +266,7 @@ class Agent:
                 return self.tools.bash(command, timeout)
 
             elif tool_name == "list_files":
-                path = args.get("path", ".")
+                path = params.get("path", ".")
                 return self.tools.list_files(path)
 
             else:
