@@ -178,37 +178,90 @@ class Agent:
 
         return tool_calls
 
+    def _parse_tool_params(self, params_str: str) -> Dict[str, str]:
+        """Parse les paramètres d'un outil (format clé:valeur ou JSON)"""
+        params_str = params_str.strip()
+
+        # Essayer JSON d'abord
+        try:
+            return json.loads(params_str)
+        except json.JSONDecodeError:
+            pass
+
+        # Parser format "key: value"
+        result = {}
+        lines = params_str.split('\n')
+        current_key = None
+        current_values = []
+
+        for line in lines:
+            line = line.rstrip()
+
+            # Si la ligne contient ":" c'est probablement une nouvelle clé
+            if ':' in line and not line.strip().startswith(' '):
+                # Sauvegarder la clé précédente
+                if current_key:
+                    result[current_key] = '\n'.join(current_values).strip()
+
+                # Nouvelle clé
+                parts = line.split(':', 1)
+                current_key = parts[0].strip()
+                value = parts[1].strip() if len(parts) > 1 else ''
+                current_values = [value] if value else []
+            else:
+                # Continuer la valeur actuelle
+                current_values.append(line)
+
+        # Sauvegarder la dernière clé
+        if current_key:
+            result[current_key] = '\n'.join(current_values).strip()
+
+        return result
+
     def _execute_tool(self, tool_call: Dict[str, str]) -> ToolResult:
         """Exécute un outil"""
         tool_name = tool_call["name"]
-        params = tool_call["params"]
+        params_str = tool_call["params"]
 
         try:
-            # Parser les paramètres (JSON ou texte)
-            try:
-                args = json.loads(params)
-            except json.JSONDecodeError:
-                args = {"raw": params}
+            # Parser les paramètres avec le nouveau parser
+            args = self._parse_tool_params(params_str)
 
             # Router vers le bon outil
             if tool_name == "read_file":
                 path = args.get("path") or args.get("raw")
+                if not path:
+                    return ToolResult(False, None, "Paramètre 'path' manquant")
                 return self.tools.read_file(path)
 
             elif tool_name == "write_file":
                 path = args.get("path")
                 content = args.get("content") or args.get("raw")
+                if not path:
+                    return ToolResult(False, None, "Paramètre 'path' manquant")
+                if content is None:
+                    content = ""
                 return self.tools.write_file(path, content)
 
             elif tool_name == "edit_file":
                 path = args.get("path")
                 old_content = args.get("old_content")
                 new_content = args.get("new_content")
+                if not all([path, old_content, new_content]):
+                    return ToolResult(False, None, "Paramètres manquants pour edit_file")
                 return self.tools.edit_file(path, old_content, new_content)
 
             elif tool_name == "bash":
                 command = args.get("command") or args.get("raw")
-                timeout = args.get("timeout", self.config["agent"]["tool_timeout"])
+                timeout = args.get("timeout") or self.config["agent"]["tool_timeout"]
+                # Convertir timeout en int si c'est une string
+                if isinstance(timeout, str):
+                    try:
+                        timeout = int(timeout)
+                    except ValueError:
+                        timeout = self.config["agent"]["tool_timeout"]
+                if not command:
+                    return ToolResult(False, None, "Paramètre 'command' manquant")
                 return self.tools.bash(command, timeout)
 
             elif tool_name == "list_files":
