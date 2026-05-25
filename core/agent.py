@@ -127,7 +127,15 @@ class Agent:
                 timeout=self.config["llm"]["timeout"]
             )
 
-            return response.choices[0].message.content
+            # Extraire le contenu (gérer reasoning_content si présent)
+            message = response.choices[0].message
+            content = message.content
+
+            # Certains modèles renvoient reasoning_content au lieu de content
+            if not content and hasattr(message, 'reasoning_content'):
+                content = message.reasoning_content
+
+            return content
         except Exception as e:
             print(f"✗ Erreur modèle: {str(e)}")
             return None

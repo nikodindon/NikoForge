@@ -1,0 +1,24 @@
+{
+  "llm": {
+    "base_url": "http://localhost:8080/v1",
+    "model": "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf",
+    "api_key": "sk-dummy",
+    "temperature": 0.7,
+    "max_tokens": 2048,
+    "timeout": null
+  },
+  "context": {
+    "max_tokens": 32000,
+    "compaction_threshold": 0.8,
+    "summary_tokens": 1000
+  },
+  "paths": {
+    "projects_dir": "projects",
+    "logs_dir": "logs",
+    "skills_dir": "skills"
+  },
+  "agent": {
+    "max_iterations": 20,
+    "tool_timeout": 600
+  }
+}
