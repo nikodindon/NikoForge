@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello World Aléatoire</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #111;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        #message {
+            font-size: 5rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            text-align: center;
+            /* Animation de clignotement */
+            animation: blinker 0.5s linear infinite;
+        }
+
+        @keyframes blinker {
+            50% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="message">Hello World</div>
+
+    <script>
+        const messageEl = document.getElementById('message');
+
+        // Liste de textes aléatoires
+        const texts = [
+            "Hello World",
+            "Bonjour le Monde",
+            "SALUT !",
+            "Hellow!",
+            "HELLO WORLD",
+            "Coucou",
+            "Wazzup",
+            "Hiii",
+            "TEST 123",
+            "SYSTEM READY"
+        ];
+
+        // Liste de couleurs vives
+        const colors = [
+            "#FF0000", // Rouge
+            "#00FF00", // Vert
+            "#0000FF", // Bleu
+            "#FFFF00", // Jaune
+            "#FF00FF", // Magenta
+            "#00FFFF", // Cyan
+            "#FFA500", // Orange
+            "#FFFFFF", // Blanc
+            "#00FF7F"  // Spring Green
+        ];
+
+        function updateDisplay() {
+            // Choisir un texte au hasard
+            const randomText = texts[Math.floor(Math.random() * texts.length)];
+            // Choisir une couleur au hasard
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+            messageEl.textContent = randomText;
+            messageEl.style.color = randomColor;
+        }
+
+        // Mettre à jour toutes les 300ms
+        setInterval(updateDisplay, 300);
+    </script>
+</body>
+</html>

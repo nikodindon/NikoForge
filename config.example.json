@@ -4,7 +4,7 @@
     "model": "Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf",
     "api_key": "sk-dummy",
     "temperature": 0.7,
-    "max_tokens": 2048,
+    "max_tokens": 8192,
     "timeout": null
   },
   "context": {
