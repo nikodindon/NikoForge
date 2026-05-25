@@ -79,7 +79,7 @@ class Agent:
 
             # Ajouter la réponse au contexte
             self.context.add_message("assistant", response)
-            print(f"\n🤖 Agent:\n{response}")
+            # Note: response est déjà affichée en streaming dans _get_model_response
 
             # Extraire et exécuter les outils
             tool_calls = self._extract_tool_calls(response)
@@ -119,23 +119,35 @@ class Agent:
             ]
             messages.extend(self.context.get_messages())
 
+            print("🤖 En attente de la réponse du modèle...", end="", flush=True)
+
             response = self.client.chat.completions.create(
                 model=self.config["llm"]["model"],
                 messages=messages,
                 temperature=self.config["llm"]["temperature"],
                 max_tokens=self.config["llm"]["max_tokens"],
-                timeout=self.config["llm"]["timeout"]
+                timeout=self.config["llm"]["timeout"],
+                stream=True  # 🔥 Streaming activé !
             )
 
-            # Extraire le contenu (gérer reasoning_content si présent)
-            message = response.choices[0].message
-            content = message.content
+            # Extraire le contenu avec streaming
+            full_content = ""
+            print("\n")  # Nouvelle ligne après "En attente..."
 
-            # Certains modèles renvoient reasoning_content au lieu de content
-            if not content and hasattr(message, 'reasoning_content'):
-                content = message.reasoning_content
+            for chunk in response:
+                if chunk.choices:
+                    delta = chunk.choices[0].delta
+                    # Afficher en temps réel
+                    if hasattr(delta, 'content') and delta.content:
+                        print(delta.content, end="", flush=True)
+                        full_content += delta.content
+                    # Certains modèles utilisent reasoning_content
+                    elif hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                        print(delta.reasoning_content, end="", flush=True)
+                        full_content += delta.reasoning_content
 
-            return content
+            print()  # Nouvelle ligne à la fin
+            return full_content
         except Exception as e:
             print(f"✗ Erreur modèle: {str(e)}")
             return None
