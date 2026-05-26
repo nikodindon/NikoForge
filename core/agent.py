@@ -15,6 +15,7 @@ except ImportError:
 from .tools import Tools, ToolResult, format_tool_result
 from .context import ContextManager
 from .prompt import get_system_prompt
+from .ui import NikoForgeUI
 
 
 class Agent:

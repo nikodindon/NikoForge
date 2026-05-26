@@ -4,6 +4,7 @@ Point d'entrée principal de NikoForge
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -11,6 +12,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core.agent import Agent
+from core.ui import NikoForgeUI
 
 
 def main():
@@ -20,7 +22,7 @@ def main():
         epilog="""
 Exemples:
   python nikoforge.py "Crée-moi un script Python qui analyse des logs"
-  python nikoforge.py --interactive
+  python nikoforge.py -i
   python nikoforge.py --help
         """
     )
@@ -55,80 +57,116 @@ Exemples:
 
     args = parser.parse_args()
 
-    # Vérifier si llama-server est accessible
-    print("🔥 NikoForge - Agent de coding local")
-    print("=" * 50)
+    # Afficher le logo
+    NikoForgeUI.clear_screen()
+    NikoForgeUI.print_logo()
 
     # Initialiser l'agent
     try:
         agent = Agent(config_path=args.config)
-        print(f"✓ Agent initialisé")
-        print(f"  - Modèle: {agent.config['llm']['model']}")
-        print(f"  - Base URL: {agent.config['llm']['base_url']}")
-        print(f"  - Max tokens: {agent.config['context']['max_tokens']}")
+        NikoForgeUI.print_header(
+            model=agent.config['llm']['model'],
+            base_url=agent.config['llm']['base_url'],
+            max_tokens=agent.config['context']['max_tokens']
+        )
     except Exception as e:
-        print(f"✗ Erreur d'initialisation: {e}")
+        NikoForgeUI.print_error(f"Erreur d'initialisation: {e}")
         sys.exit(1)
 
     # Charger le contexte si demandé
     if args.load_context:
         try:
             agent.load_context(args.load_context)
-            print(f"✓ Contexte chargé depuis {args.load_context}")
+            NikoForgeUI.print_success(f"Contexte chargé depuis {args.load_context}")
         except Exception as e:
-            print(f"✗ Erreur chargement contexte: {e}")
+            NikoForgeUI.print_error(f"Erreur chargement contexte: {e}")
             sys.exit(1)
 
     # Mode interactif ou direct
     if args.interactive:
-        print("\n📝 Mode interactif activé")
-        print("   Tape ta tâche ci-dessous (ou 'quit' pour sortir)\n")
+        NikoForgeUI.print_welcome()
+
+        start_time = time.time()
 
         while True:
             try:
-                task = input("❓ NikoForge> ").strip()
+                task = NikoForgeUI.print_prompt()
 
                 if not task:
                     continue
                 if task.lower() in ['quit', 'exit', 'q']:
-                    print("👋 Au revoir !")
+                    NikoForgeUI.print_success("Au revoir !")
                     break
 
-                print()
+                if task.lower() == 'stats':
+                    stats = agent.get_stats()
+                    NikoForgeUI.print_stats(stats)
+                    continue
+
+                if task.lower() == 'clear':
+                    NikoForgeUI.clear_screen()
+                    NikoForgeUI.print_logo()
+                    NikoForgeUI.print_header(
+                        model=agent.config['llm']['model'],
+                        base_url=agent.config['llm']['base_url'],
+                        max_tokens=agent.config['context']['max_tokens']
+                    )
+                    continue
+
+                if task.lower() == 'help':
+                    NikoForgeUI.print_help()
+                    continue
+
+                # Exécuter la tâche
+                NikoForgeUI.print_task(task)
                 agent.run(task, interactive=True)
 
+                # Afficher la barre de statut après chaque tâche
+                elapsed_time = time.time() - start_time
+                stats = agent.get_stats()
+                NikoForgeUI.print_status_bar(
+                    model=agent.config['llm']['model'],
+                    current_tokens=stats['context_stats']['estimated_tokens'],
+                    max_tokens=agent.config['context']['max_tokens'],
+                    iteration=stats['iteration'],
+                    elapsed_time=elapsed_time
+                )
+
             except KeyboardInterrupt:
-                print("\n👋 Au revoir !")
+                NikoForgeUI.print_success("Au revoir !")
                 break
     else:
         # Mode direct
         if not args.task:
+            NikoForgeUI.print_info("Tu dois fournir une tâche ou utiliser le mode interactif (-i)")
             parser.print_help()
-            print("\n⚠️  Tu dois fournir une tâche ou utiliser le mode interactif (-i)")
             sys.exit(1)
 
-        print(f"\n📋 Tâche: {args.task}\n")
+        start_time = time.time()
+        NikoForgeUI.print_task(args.task)
         result = agent.run(args.task, interactive=False)
 
-        print("\n" + "=" * 50)
-        print("✓ Terminé !")
-
-        # Afficher les stats
+        # Afficher la barre de statut
+        elapsed_time = time.time() - start_time
         stats = agent.get_stats()
-        print(f"\n📊 Statistiques:")
-        print(f"  - Itérations: {stats['iteration']}")
-        print(f"  - Messages: {stats['context_stats']['total_messages']}")
-        print(f"  - Tokens estimés: {stats['context_stats']['estimated_tokens']}")
-        if stats['context_stats']['compaction_count'] > 0:
-            print(f"  - Compactions: {stats['context_stats']['compaction_count']}")
+        NikoForgeUI.print_status_bar(
+            model=agent.config['llm']['model'],
+            current_tokens=stats['context_stats']['estimated_tokens'],
+            max_tokens=agent.config['context']['max_tokens'],
+            iteration=stats['iteration'],
+            elapsed_time=elapsed_time
+        )
+
+        NikoForgeUI.print_completion()
+        NikoForgeUI.print_stats(stats)
 
     # Sauvegarder le contexte si demandé
     if args.save_context:
         try:
             agent.save_context(args.save_context)
-            print(f"✓ Contexte sauvegardé dans {args.save_context}")
+            NikoForgeUI.print_success(f"Contexte sauvegardé dans {args.save_context}")
         except Exception as e:
-            print(f"✗ Erreur sauvegarde contexte: {e}")
+            NikoForgeUI.print_error(f"Erreur sauvegarde contexte: {e}")
 
 
 if __name__ == "__main__":
