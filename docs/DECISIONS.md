@@ -35,7 +35,7 @@ est obligatoire pour ne pas perdre cette promesse.
 
 ## D2 — Comportement de `nikoforge` sans argument
 
-**Statut : PROPOSÉ (en attente de confirmation)**
+**Statut : PROPOSÉ — implémenté en phase 2, à confirmer**
 
 **Décision proposée** : REPL interactif par défaut ; `-p/--print "prompt"` pour le one-shot.
 
@@ -43,10 +43,15 @@ est obligatoire pour ne pas perdre cette promesse.
 s'utilise majoritairement en conversation continue ; exiger `-i` pour ça est un frottement
 inutile. Le one-shot reste accessible et scriptable via `-p`.
 
-**Conséquences** :
-- `--interactive/-i` disparaît (devient le défaut) → à documenter dans la note de migration v2→v3.
-- Le mode `-p` doit être utilisable dans un pipe (`--plain`, `--json`).
-- La sortie du REPL doit être propre en TTY **et** en pipe.
+**Mis en œuvre ainsi (phase 2)** :
+- `nikoforge` seul ouvre le REPL ; `nikoforge -p "..."` exécute une tâche et rend la main.
+- `-i/--interactive` est toujours **accepté** mais sans effet, avec une note sur `stderr` :
+  la commande documentée de la v2 continue de marcher.
+- `nikoforge "tâche"` (sans `-p`) fonctionne aussi, avec une note de dépréciation.
+  Contrepartie assumée : un mot isolé est *toujours* lu comme un prompt, donc une sous-commande
+  mal orthographiée devient une tâche au lieu d'une erreur (test `known_issue` en phase 5).
+
+**Conséquences** : à documenter dans `docs/migration-v2-v3.md` (fait).
 
 ---
 
@@ -103,7 +108,7 @@ philosophie du projet et les autres dépôts publics de l'auteur.
 
 ## D6 — Format de configuration
 
-**Statut : TRANCHÉ**
+**Statut : TRANCHÉ — implémenté en phase 2**
 
 **Décision** : TOML, à `~/.config/nikoforge/config.toml` (surchargé par
 `$NIKOFORGE_CONFIG`). Le fichier est **optionnel** : toutes les valeurs par défaut existent
@@ -113,10 +118,20 @@ en dur dans le code, `nikoforge --print-config` les affiche.
 stdlib depuis Python 3.11 — cohérent avec le plancher 3.11 de la CI). Le JSON actuel impose
 une étape d'édition manuelle qui bloque un utilisateur sur deux au premier lancement (bug B1).
 
-**Conséquences** :
-- `config.example.json` supprimé en phase 1.
-- Ordre de précédence : défauts < TOML < variables d'environnement < arguments CLI.
-- `--init` écrit le TOML ; si l'utilisateur ne le fait jamais, le projet tourne quand même.
+**Mis en œuvre ainsi (phase 2)** :
+- `nikoforge/config.py` : dataclasses gelées, défauts complets, précédence
+  `défauts < TOML < environnement < CLI`.
+- 10 variables `NIKOFORGE_*`. Une clé ou une section inconnue est **refusée** avec la liste
+  des clés valides — pas de faute de frappe silencieuse.
+- `render_toml` produit un TOML commenté et complet, ré-analysable à l'identique
+  (`test_render_toml_round_trip`). `write_config` écrit de façon atomique.
+- TOML n'ayant pas de valeur nulle, `llm.timeout = 0` signifie « pas de limite » (et non
+  `null`, qui n'existe pas dans le format).
+- `nikoforge init` écrit le fichier ; `--print-config` l'affiche sans rien écrire.
+- `config.example.json` supprimé, section `paths` supprimée (jamais implémentée, bug C12).
+
+**Conséquences** : la note `docs/migration-v2-v3.md` contient la traduction d'un
+`config.json` de la v2 vers le TOML.
 
 ---
 

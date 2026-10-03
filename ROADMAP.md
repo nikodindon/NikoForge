@@ -83,35 +83,50 @@ comme avant (aucune modification de comportement : seuls des imports morts et de
 
 ## Phase 2 — Installation et configuration
 
-*1 j — débloque le projet pour de bon*
+*1 j — débloque le projet pour de bon — terminée*
 
-- [ ] `pyproject.toml` complet : `console_scripts = nikoforge = nikoforge.cli:main`, `__main__.py`.
-- [ ] `nikoforge/__init__.py` : `__version__`, importable depuis un seul endroit.
-- [ ] Réorganiser : `core/` → `nikoforge/` (paquet installable), adapter les imports.
-- [ ] `config.py` : dataclass avec **toutes les valeurs par défaut en dur** ; résolution
-      `défauts < ~/.config/nikoforge/config.toml < variables d'env < arguments CLI`.
-      Variables : `NIKOFORGE_BASE_URL`, `NIKOFORGE_MODEL`, `NIKOFORGE_API_KEY`,
-      `NIKOFORGE_CONTEXT`.
-- [ ] `nikoforge --init` : assistant de premier lancement (détecte le serveur, interroge
-      `/v1/models`, écrit le TOML, propose la commande `llama-server` si absent).
-- [ ] `nikoforge doctor` : diagnostic (python, version, config, serveur, modèle, contexte, outils,
-      skills, workdir) avec codes de sortie exploitables.
-- [ ] Supprimer `requirements.txt`, redondant désormais que `pyproject.toml` déclare
-      `dependencies` : deux sources de vérité pour les dépendances, c'est une dérive garantie.
-- [ ] `--version`, `--print-config`, `--print-system-prompt`.
-- [ ] Préflight : si le serveur ne répond pas, message clair + commande suggérée, avant toute
-      itération. **Corrige B2.**
-- [ ] `README.md` réécrit : `Installer / Utiliser / Étendre`, avec les **sorties réelles**
-      des commandes capturées.
+- [x] `pyproject.toml` complet : `console_scripts = nikoforge = nikoforge.cli:main`,
+      ``__main__.py`` pour `python -m nikoforge`. Version **dynamique** lue dans
+      `nikoforge/__init__.py` (source unique de vérité).
+- [x] `nikoforge/__init__.py` : `__version__ = "3.0.0.dev0"`, import différé (``import
+      nikoforge`` ne charge pas `openai`, pour que `doctor` et `--version` fonctionnent même
+      si la dépendance est cassée).
+- [x] Réorganisé : `core/` → `nikoforge/` (paquet installable). `nikoforge.py` supprimé.
+- [x] `config.py` : dataclasses gelées, **toutes les valeurs par défaut en dur**, précédence
+      complet `défauts < TOML < environnement < CLI`. 10 variables `NIKOFORGE_*`. Clé ou
+      section inconnue → erreur explicite. `render_toml` / `write_config` (écriture atomique)
+      avec aller-retour TOML fidèle.
+- [x] `nikoforge init` (et l'alias `--init`) : sonde le serveur, lit `/v1/models`, choisit le
+      modèle, écrit un TOML complet et commenté ; si le serveur est absent, affiche la commande
+      `llama-server` avec un GGUF local trouvé automatiquement.
+- [x] `nikoforge doctor` : 10 contrôles, un remède par échec, code de sortie exploitable.
+- [x] `requirements.txt` et `config.example.json` supprimés (redondants avec `pyproject.toml`
+      et les défauts en dur).
+- [x] `--version`, `--print-config`, `--print-system-prompt`.
+- [x] Pré-vol : `GET /v1/models` testé **avant** la première itération, avec la commande à
+      copier et sortie en code 3. **Corrige B2.**
+- [x] `README.md` réécrit en `Installer / Utiliser / Étendre`, sorties réelles recopiées.
+      Ajout de `docs/migration-v2-v3.md` et `docs/prompts.md`.
+- [x] Correctifs attrapés en cours de route :
+      - `probe()` levait une exception sur une URL sans schéma alors que son contrat est de ne
+        jamais lever (attrapé par `test_probe_never_raises_whatever_the_url`) ;
+      - `edit_file` impossible à utiliser pour **supprimer** du texte (bug C16, confirmé par
+        un test) ;
+      - **C17 largement corrigé** : code de sortie 3 sans serveur, 1 quand la tâche ne produit
+        rien, `Ctrl+D` traité proprement. Le reste (échec en cours de tour, `--json`) est en
+        phase 5.
 
-**Débloque** : B1, B2, B3.
-**Critère de sortie** — à exécuter littéralement :
-1. `pip install -e .` puis `nikoforge doctor` → tout ✔.
-2. `nikoforge -p "dis bonjour"` → réponse du modèle, **sans avoir édité un seul fichier de
-   configuration**.
-3. `nikoforge --print-config` → TOML complet, commenté.
-4. Sur une machine vierge (ou un venv neuf), du clone au premier prompt < 2 min.
-5. Sans serveur : `nikoforge -p "test"` affiche un message actionnable et sort en code ≠ 0.
+**Débloque** : B1, B2, B3 — le projet démarre désormais sans aucun fichier de configuration.
+**Critère de sortie** — les cinq vérifiés par exécution réelle :
+
+1. `doctor` → `Tout est opérationnel`, code 0 ✔
+2. `nikoforge -p "dis bonjour"` → réponse du modèle, **aucun fichier de configuration créé
+   ni lu** (vérifié : `~/.config` n'existe pas après l'exécution) ✔
+3. `--print-config` → TOML complet et commenté, ré-analysable ✔
+4. venv neuf, du clone au premier prompt < 2 min ✔ (voir le journal)
+5. sans serveur → message actionnable + `llama-server -m …` à copier, code de sortie 3 ✔
+
+Résultat de la suite : **246 tests**, `ruff` et `mypy` propres.
 
 ---
 
@@ -218,8 +233,9 @@ comme avant (aucune modification de comportement : seuls des imports morts et de
       `~/.local/state/nikoforge/checkpoints/` → `/undo` restaure.
 - [ ] `--dry-run` (montre sans exécuter), `--yes` (auto-approbation), `--json`.
 - [ ] Ctrl+C = arrêt **du tour**, pas du process (`/stop` en équivalent slash).
-- [ ] **Codes de sortie exploitables** : une tâche qui échoue sort en code ≠ 0 ; `Ctrl+D` et
-      `</dev/null` terminent proprement au lieu de lever `EOFError`. **Corrige C17.**
+- [ ] **Codes de sortie exploitables** : compléter C17 (largement corrigé en phase 2 : sortie
+      3 sans serveur, 1 si la tâche ne produit rien, `Ctrl+D` propre) — reste l'échec en cours
+      de tour et le mode `--json`.
 
 **Critère de sortie** :
 1. Lancer une tâche, `kill` en plein milieu, relancer avec `-c` → la session reprend.
@@ -272,7 +288,7 @@ environnement vierge, et `nikoforge doctor` est entièrement vert.
 |---|---|---|---|
 | 0 — Cadrage | `[~]` | 2 | 2026-10-03 |
 | 1 — Hygiène | `[x]` | 4 | 2026-10-03 |
-| 2 — Installation | `[ ]` | | |
+| 2 — Installation | `[x]` | 6 | 2026-10-03 |
 | 3 — Cœur fiable | `[ ]` | | |
 | 4 — Outillage | `[ ]` | | |
 | 5 — UX / observabilité | `[ ]` | | |
@@ -308,3 +324,4 @@ de route sans dériver la phase en cours.
 | 2026-10-03 | Audit complet du dépôt (`139c001`). 15 bugs reproduits, 5 bloquants identifiés. Branche `dev` créée. `docs/REFONTE.md` et `ROADMAP.md` écrits. |
 | 2026-10-03 | `docs/DECISIONS.md` créé. D4/D5/D6 retenus, D1/D2/D3 proposés (en attente). |
 | 2026-10-03 | **Phase 1 terminée.** Dépôt purgé (11 fichiers supprimés, 2 dossiers déplacés), `pyproject.toml` + `LICENSE` + `CHANGELOG.md` + `.editorconfig` ajoutés, suite de **135 tests** créée (21 `known_issue`). `pytest`, `ruff` et `mypy` verts. 2 bugs supplémentaires découverts (C16, C17) → 17 au total. |
+| 2026-10-03 | **Phase 2 terminée.** `core/` → paquet `nikoforge/` installable, `config.py` (défauts complets + TOML + 10 variables d'env), `server.py`, `doctor.py`, `wizard.py`, `cli.py` réécrit (sous-commandes, 4 codes de sortie). `requirements.txt` et `config.example.json` supprimés. README réécrit, `docs/migration-v2-v3.md` et `docs/prompts.md` ajoutés. **246 tests**, verts. B1, B2, B3 corrigés ; C17 largement corrigé. Les 5 critères de sortie vérifiés par exécution réelle. |
