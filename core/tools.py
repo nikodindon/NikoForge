@@ -2,9 +2,7 @@
 Outils de base pour NikoForge
 """
 
-import os
 import subprocess
-import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -139,7 +137,7 @@ class Tools:
 def format_tool_result(result: ToolResult) -> str:
     """Formate le résultat d'un outil pour l'affichage"""
     if result.success:
-        output = f"✓ Succès\n"
+        output = "✓ Succès\n"
         if result.data:
             output += f"Données: {result.data}\n"
         return output

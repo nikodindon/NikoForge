@@ -3,19 +3,17 @@ Boucle principale de l'agent NikoForge
 """
 
 import json
-import time
 from typing import Optional, Dict, Any
 from pathlib import Path
 
 try:
     from openai import OpenAI
-except ImportError:
-    OpenAI = None
+except ImportError:  # pragma: no cover - dépendance déclarée dans pyproject.toml
+    OpenAI = None  # type: ignore[assignment,misc]
 
 from .tools import Tools, ToolResult, format_tool_result
 from .context import ContextManager
 from .prompt import get_system_prompt
-from .ui import NikoForgeUI
 
 
 class Agent:

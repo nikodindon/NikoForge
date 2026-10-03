@@ -3,8 +3,6 @@ Module UI pour NikoForge - Affichage stylisé et barre de statut
 """
 
 import os
-import sys
-from typing import Optional
 
 
 class NikoForgeUI:
@@ -92,7 +90,7 @@ class NikoForgeUI:
     @staticmethod
     def print_stats(stats: dict):
         """Affiche les statistiques"""
-        print(f"\n📊 Statistiques:")
+        print("\n📊 Statistiques:")
         print(f"  • Itérations: {stats['iteration']}")
         print(f"  • Messages: {stats['context_stats']['total_messages']}")
         print(f"  • Tokens estimés: {stats['context_stats']['estimated_tokens']}")
