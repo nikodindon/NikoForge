@@ -27,9 +27,10 @@ Légende : `[ ]` à faire · `[x]` fait · `[~]` en cours
 
 - [ ] Trancher les 6 décisions ouvertes de `docs/REFONTE.md` §5.5 (D1 protocole, D2 mode par
       défaut, D3 isolation, D4 licence, D5 nom, D6 TOML).
-- [ ] Créer `docs/DECISIONS.md` et y consigner les 6 arbitrages avec leur justification.
+      → D4, D5, D6 retenus. **D1, D2, D3 proposés et en attente de confirmation.**
+- [x] Créer `docs/DECISIONS.md` et y consigner les 6 arbitrages avec leur justification.
 - [ ] Confirmer le périmètre de la v3.0 (§6 du document de refonte) et le gel du backlog.
-- [ ] Vérifier l'accès au dépôt et pousser la branche `dev` sur `origin`.
+- [x] Vérifier l'accès au dépôt et pousser la branche `dev` sur `origin`.
 
 **Critère de sortie** : `docs/DECISIONS.md` existe avec 6 entrées datées ; `ROADMAP.md` et
 `docs/REFONTE.md` sont sur `origin/dev`.
