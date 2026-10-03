@@ -98,6 +98,17 @@ class NikoForgeUI:
             print(f"  • Compactions: {stats['context_stats']['compaction_count']}")
 
     @staticmethod
+    def render_mode() -> str:
+        """Retourne le mode d'affichage : plain (pas d'emoji/ANSI), rich (TTY), json (NDJSON)."""
+        # La logique réelle (détection TTY, --plain, --json) est dans cli.py
+
+    # Session : persistance JSONL append-only (ROADMAP.md phase 5)
+    SESSION_DIR = "~/.local/share/nikoforge/sessions"
+    CHECKPOINT_DIR = "~/.local/state/nikoforge/checkpoints" ; ce stub
+        # expose le contrat, qui est testé par test_ui.py en phase 6.
+        return "rich"
+
+    @staticmethod
     def print_help():
         """Affiche l'aide"""
         print("\n📚 Aide NikoForge:")
