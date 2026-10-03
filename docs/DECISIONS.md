@@ -10,26 +10,46 @@ Format : `D<n> — titre` · statut (`TRANCHÉ` / `PROPOSÉ`) · décision · ra
 
 ## D1 — Protocole d'appel d'outils
 
-**Statut : PROPOSÉ (en attente de confirmation)**
+**Statut : TRANCHÉ (2026-10-03) — mesuré sur un serveur réel, implémenté en phase 3**
 
-**Décision proposée** : hybride à détection de capacité.
-- Si le serveur accepte le tool-calling natif OpenAI (`tools`, réponse en `tool_calls`
-  structurés) → **on l'utilise**. C'est le chemin nominal.
-- Sinon → repli sur un format texte balisé encodé en **CDATA** (et non plus en XML brut),
-  analysé par une **machine à états**, jamais par regex.
-- Détection au démarrage, avec surcharge possible par la config (`protocol = "auto" | "native" | "text"`)
-  et `nikoforge doctor` qui affiche ce qui a été choisi.
+**Décision** : hybride à détection de capacité.
 
-**Raison** : llama.cpp avec `--jinja` et Qwen3 supporte `tools` nativement. Le chemin natif
-supprime par construction toute la classe de bugs C1 (contenu généré contenant `</tool>`).
-Mais le projet revendique de tourner sur n'importe quel serveur OpenAI-compatible : le repli
-est obligatoire pour ne pas perdre cette promesse.
+- Détection sur ``GET /props`` → ``chat_template_caps.supports_tools``.
+- Si vrai → **tool-calling natif** (champ ``tools``, réponse en ``tool_calls`` structurés).
+- Sinon, ou si le serveur renvoie une erreur en refusant ``tools`` → **protocole textuel**
+  balisé, contenu encodé en **CDATA**, analysé par une machine à états (jamais par expression
+  régulière).
+- Les deux formes sont **toujours acceptées en lecture** : même en mode natif, un bloc balisé
+  présent dans le contenu est décodé et retiré du texte. Un modèle ou un serveur qui mélange
+  les deux ne casse rien.
+- ``llm.protocol`` permet de forcer ``auto`` (défaut), ``native`` ou ``text``. Un mode forcé ne
+  se replie pas : l'erreur est explicite.
+
+**Mesures qui ont tranché** (serveur ``llama-server``, modèle ``Ornith-1.5-35B-IQ2_M``) :
+
+```
+GET /v1/models   → "capabilities": ["completion"]        ← FAUX, n'indique pas les outils
+GET /props       → chat_template_caps.supports_tools: true
+                   supports_parallel_tool_calls: true
+                   supports_system_role: true
+POST /v1/chat/completions avec tools=… → HTTP 200
+                   tool_calls: [{"name": "list_files", "arguments": "{\"path\":\".\"}"}]
+```
+
+**Raison** : le champ ``capabilities`` de ``/v1/models`` a menti. Une détection fondée sur lui
+aurait conclu « pas d'outils » et fait prendre le chemin textuel — donc la classe de bugs C1 —
+alors que le serveur gère parfaitement les appels natifs. ``/props`` est la source fiable.
+Le repli textuel reste indispensable : le projet revendique de tourner sur n'importe quel
+serveur compatible OpenAI, et ceux qui n'ont pas de ``tools`` existent.
 
 **Conséquences** :
-- `protocol.py` doit implémenter **les deux** chemins et être testé indépendamment du réseau.
-- Le repli texte doit être symétrique : l'encodeur échappe le contenu, le décodeur le restitue
-  à l'identique (test d'égalité binaire obligatoire en phase 3).
-- Si la détection se trompe, l'utilisateur doit pouvoir forcer le mode sans lire le code.
+- ``protocol.py`` est pur (aucune entrée/sortie) et couvert par 103 tests, dont l'aller-retour
+  encodeur/décodeur sur des contenus piégés (``</tool>``, ``</param>``, ``</tool_calls>``,
+  indentation, entités, CDATA imbriqué, 100 000 caractères).
+- ``LLM`` bascule automatiquement sur un refus de ``tools`` et mémorise le choix pour la
+  session (testé).
+- La classe de bugs C1a ne peut plus se produire sur le chemin natif, et plus sur le chemin
+  textuel non plus : dans un CDATA, un ``</tool>`` du contenu est invisible pour le découpage.
 
 ---
 

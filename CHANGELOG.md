@@ -10,31 +10,58 @@ Versionnage : [Semantic Versioning](https://semver.org/lang/fr/).
 Refonte complète. Analyse et justification : [`docs/REFONTE.md`](docs/REFONTE.md).
 Plan d'exécution : [`ROADMAP.md`](ROADMAP.md).
 
-### Corrigé (à venir)
+### Corrigé
 
-17 défauts identifiés et reproduits sur la v2. Les principaux :
+18 défauts identifiés et reproduits. Les principaux :
 
-- Parser XML qui tronque silencieusement le contenu généré dès qu'il contient une balise
-  de fermeture (`</tool>`, `</param>`, `</tool_calls>`) — écrire un fichier HTML ou
-  documenter le format XML suffisait à corrompre le fichier.
-- `iteration` jamais remise à zéro : `max_iterations` était un budget de **session**, si bien
-  qu'après 20 itérations cumulées l'agent devenait un no-op silencieux (`run()` renvoyait
-  une chaîne vide sans aucun message).
-- Le modèle recevait une `repr()` Python (`Données: {'stdout': ...}`) au lieu de la sortie
+- **Parser d'outils qui tronquait le contenu généré** dès qu'il contenait une balise de
+  fermeture (`</tool>`, `</param>`, `</tool_calls>`) : écrire un fichier HTML ou documenter le
+  format suffisait à corrompre le fichier, avec un « ✓ Fichier écrit » pour toute réponse.
+  Remplacé par une machine à états, contenu encodé en CDATA, aller-retour vérifié sur
+  17 contenus piégés.
+- **Indentation détruite** par un `.strip()` appliqué à tous les paramètres : un modèle qui
+  indentait correctement produisait un fichier Python qui ne compilait pas.
+- **Entités XML non décodées** : un modèle échappant correctement son contenu écrivait
+  `&lt;div&gt;` au lieu de `<div>`.
+- **`iteration` jamais remise à zéro** : `max_iterations` était un budget de **session**, et
+  après 20 itérations cumulées `run()` renvoyait une chaîne vide sans aucun message.
+- **Le modèle recevait une `repr()` Python** (`Données: {'stdout': ...}`) au lieu de la sortie
   brute de l'outil.
-- `reasoning_content` fusionné dans le contenu final : la réflexion du modèle était stockée
-  dans l'historique et renvoyée à chaque tour.
-- `edit_file` remplaçait **toutes** les occurrences d'un motif, sans avertissement.
-- Aucune borne sur les entrées/sorties : `read_file` sans `offset`/`limit`, `bash` renvoyant
-  stdout+stderr complets.
-- Compaction non-LLM qui concatène et tronque les messages bruts par découpage de chaîne, et
-  ne conserve que les 2 derniers messages — la tâche initiale disparaissait du contexte actif.
-- `skills_dir` / `projects_dir` déclarés dans la configuration et documentés, mais lus par
-  aucune ligne de code.
-- `config.json` obligatoire, absent du dépôt et gitignoré : le projet ne démarrait pas.
+- **`reasoning_content` fusionné dans le contenu final** : la réflexion du modèle était
+  stockée dans l'historique et renvoyée à chaque tour.
+- **`edit_file` remplaçait toutes les occurrences** d'un motif, sans avertissement.
+- **Impossible de supprimer du texte** : `all([path, old, new])` rejetait une chaîne vide.
+- **Aucune borne sur les E/S** : `read_file` sans `offset`/`limit`, `bash` renvoyant
+  stdout+stderr complets. Les sorties envoyées au modèle sont désormais bornées tête et queue.
+- **Compaction non-LLM** qui concaténait et tronquait les messages bruts par découpage de
+  chaîne, en ne gardant que les 2 derniers : la tâche initiale disparaissait du contexte actif.
+- **Taille de contexte estimée par `len // 4`** : faux d'environ 25 % sur du code, d'un facteur
+  4 hors alphabet latin. Les tokens réels du serveur sont utilisés.
+- **Le résumé était injecté comme second message `system`** au milieu de l'historique ; il est
+  maintenant replié dans le message initial.
+- **L'approbation arrivait après l'exécution** : elle ne protégeait rien. Elle a lieu avant,
+  outil par outil.
+- **Aucun délai d'attente, aucune reprise, erreurs anonymes** : `timeout=None` et un
+  `except Exception` unique. Remplacé par 300 s par défaut, reprise bornée à attente doublée, et
+  des erreurs nommées (`serveur injoignable`, `modèle inconnu`, `contexte trop long`, `outils
+  refusés`).
+- **Les appels d'outils natifs n'étaient pas structurés pour le gabarit du serveur** (message
+  assistant vide, résultats en messages `user`) : le modèle rappelait l'outil indéfiniment.
+  Trouvé en usage réel, 6 itérations au lieu de 3.
+- **`skills_dir` / `projects_dir` déclarés et documentés mais lus par aucune ligne de code.**
+- **Le CLI sortait toujours en code 0**, y compris serveur éteint, et plantait sur `Ctrl+D`.
+- **Champ `capabilities` de `/v1/models` non fiable** : il annonce `["completion"]` sur un
+  serveur qui gère parfaitement `tools`. La détection se fait sur `/props`.
 
 ### Ajouté
 
+- **Tool-calling natif** (API OpenAI) avec détection de capacité sur `GET /props`, et repli
+  automatique vers un protocole textuel encodé en CDATA, analysé par une machine à états.
+  Les deux formes sont acceptées en lecture.
+- `nikoforge.protocol` : schéma des outils en **source unique** (le prompt système est engendré
+  depuis lui, donc plus de dérive prompt/routeur).
+- `nikoforge.llm` : streaming, réassemblage des `tool_calls` fragmentés, raisonnement conservé à
+  part, `usage` réels, reprises, erreurs nommées.
 - **Paquet installable** : `console_scripts` (`nikoforge`), `python -m nikoforge`, version
   dynamique lue depuis `nikoforge/__init__.py`.
 - `nikoforge doctor` : 10 contrôles d'installation (python, paquet, config, serveur, modèle,

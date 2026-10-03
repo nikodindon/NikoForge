@@ -376,6 +376,49 @@ donc une trace Python. Le REPL n'est pas pilotable par un tube.
 Découvert en écrivant la suite de tests (phase 1). Voir
 `test_a_failed_run_still_exits_with_code_zero` et `test_interactive_mode_crashes_on_end_of_input`.
 
+### C18 — les appels d'outils natifs n'étaient pas structurés pour le serveur
+
+Découvert en **phase 3, sur un vrai serveur** (llama-server, modèle ``Ornith-1.5-35B-IQ2_M``),
+en lançant une tâche réelle. Le harnais exécutait bien les outils, mais la conversation
+renvoyée au modèle n'était pas celle qu'un gabarit de chat attend :
+
+```
+--- requete 2 : 4 messages ---
+  [system]    1430 caracteres
+  [user]      'Cree un fichier hello.py qui affiche Bonjour NikoForge, puis execute-le.'
+  [assistant] ''                                          <- message assistant VIDE
+  [user]      '[outil write_file — succès] ...'           <- résultat en message « user »
+```
+
+En protocole natif, ``tool_calls`` arrive dans un message assistant dont le ``content`` est
+vide. On ne stockait que ce contenu : le ``tool_calls`` et le ``tool_call_id`` étaient perdus.
+Le modèle voyait donc un tour assistant vide suivi d'un message utilisateur, sans lien
+structurel entre son appel et la réponse — il rappelait l'outil, indéfiniment.
+
+Constat mesuré, même tâche, même budget :
+
+| | avant | après |
+|---|---|---|
+| itérations | 6 (budget épuisé) | 3 |
+| durée | 30,5 s | 16,7 s |
+| code de sortie | 1 | 0 |
+| réponse finale | aucune | « C'est fait ! ✅ … » |
+
+**Correction** : l'historique suit le protocole OpenAI — message assistant portant
+``tool_calls``, puis un message ``role: "tool"`` avec ``tool_call_id`` et ``name`` par
+résultat. Le protocole textuel, lui, garde la forme ReAct (résultats en messages ``user``),
+puisqu'il n'a pas d'identifiant d'appel.
+
+**Corollaire traité dans la foulée** : la compaction ne doit jamais couper entre un message
+assistant porteur d'appels et les messages ``tool`` qui lui répondent — un ``tool`` orphelin
+fait échouer le gabarit du serveur. La coupe recule jusqu'au message assistant.
+
+Ni l'un ni l'autre n'était visible dans les tests : la doublure du client ne valide pas la
+structure des messages. Il fallait un vrai serveur et un vrai gabarit, ce que le faux serveur
+de ``tests/fake_server.py`` ne reproduit pas fidèlement (il ignore les rôles). C'est l'argument
+pour garder, en phase 6, un test d'intégration optionnel contre un vrai ``llama-server``.
+
+
 
 ---
 

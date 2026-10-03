@@ -5,7 +5,7 @@ commandes, en utilisant un modèle que tu fais tourner chez toi (llama-server ou
 compatible OpenAI).
 
 > ⚠️ **Branche `dev` — refonte v3.0 en cours.** `main` reste la v2.0 (fonctionnelle, mais
-> 17 défauts reproduits dont un qui empêche le démarrage sans `config.json`).
+> 18 défauts reproduits dont un qui empêche le démarrage sans `config.json`).
 > 📄 [`docs/REFONTE.md`](docs/REFONTE.md) · 🗺️ [`ROADMAP.md`](ROADMAP.md) ·
 > ⚖️ [`docs/DECISIONS.md`](docs/DECISIONS.md)
 
@@ -103,37 +103,46 @@ nikoforge --print-system-prompt         # prompt envoyé au modèle (debug)
 nikoforge --version
 ```
 
-Une tâche, sur une machine où rien n'a été configuré :
+Une tâche, sur le vrai serveur de développement (llama-server, modèle 35 B, protocole
+d'appels d'outils **natif** détecté automatiquement sur `/props`) :
 
 ```
-$ nikoforge -p "dis bonjour"
+$ nikoforge --cwd /tmp/demo --max-iterations 6 \
+    -p "Cree un fichier hello.py qui affiche Bonjour NikoForge, puis execute-le pour verifier."
 
-📋 Tâche: dis bonjour
+📋 Tâche: Cree un fichier hello.py qui affiche Bonjour NikoForge, puis execute-le pour verifier.
 
 ──────────────────────────────────────────────────────────────────────
 
---- Itération 1/20 ---
-🤖 En attente de la réponse du modèle...
-
-Bonjour ! Je suis un faux modele local, et je confirme que la chaine complete fonctionne.
-
-✓ Tâche terminée
-
- ⚕ Qwen3.6-35B-A3B-UD-IQ3_S.gguf │ ctx 24/32768 │ [░░░░░░░░░░░░░░░░░░░░] 0.1% │ 1 itérations │ ⏲ 0.0s
+ ⚕ /mnt/data/sdc2/models/Ornith-1.5-35B-IQ2_M.gguf │ ctx 1245/32768 │ [░░░░░░░░░░░░░░░░░░░░] 3.8% │ 3 itérations │ ⏲ 16.7s
 ──────────────────────────────────────────────────────────────────────
+C'est fait ! ✅
+
+- ✅ `hello.py` créé avec `print("Bonjour NikoForge")`
+- ✅ Exécuté avec succès
+- Sortie : `Bonjour NikoForge`
 
 📊 Statistiques:
-  • Itérations: 1
-  • Messages: 2
-  • Tokens estimés: 24
+  • Itérations: 3
+  • Messages: 6
+  • Tokens estimés: 1245
 
-✓ Tâche terminée
-──────────────────────────────────────────────────────────────────────
 ✓ Terminé !
 ```
 
-*(sortie réelle, obtenue contre un serveur de test annonçant ce modèle — le trajet complet
-est exercé : CLI → pré-vol → `/v1/models` → streaming SSE → affichage)*
+*(sortie réelle, recopiée telle quelle. Le fichier créé contient bien `print("Bonjour
+NikoForge")` et son exécution affiche `Bonjour NikoForge`.)*
+
+### Protocole d'appel d'outils
+
+NikoForge utilise le **tool-calling natif** de l'API OpenAI quand le serveur l'annonce, et
+bascule sinon sur un protocole textuel balisé dont le contenu est encodé en CDATA. Les deux
+formes sont acceptées en lecture, y compris mélangées.
+
+La détection se fait sur `GET /props` → `chat_template_caps.supports_tools`, et **non** sur le
+champ `capabilities` de `GET /v1/models` : mesuré sur un serveur réel, celui-ci annonce
+`["completion"]` tout en gérant parfaitement `tools`. Forçable par `llm.protocol`
+(`auto` | `native` | `text`).
 
 ### Codes de sortie
 
@@ -226,12 +235,14 @@ nikoforge/
   server.py      découverte du serveur et du modèle (urllib, sans dépendance)
   doctor.py      diagnostic, contrôles et remèdes
   wizard.py      assistant `init`
-  agent.py       boucle de l'agent, routage des outils
+  protocol.py    (dé)codage des appels d'outils + schéma des outils — pur, sans I/O
+  llm.py         streaming, outils, raisonnement, reprises, erreurs nommées
+  agent.py       boucle de la tâche, approbation, rendu des résultats
+  context.py     historique, mesure réelle du contexte, compaction par le modèle
   tools.py       read_file, write_file, edit_file, bash, list_files
-  context.py     historique et compaction
-  prompt.py      prompt système
+  prompt.py      prompt système (liste d'outils engendrée depuis protocol.py)
   ui.py          affichage terminal
-tests/           246 tests, aucun serveur LLM requis
+tests/           416 tests, aucun serveur LLM requis
 examples/        projets produits par l'agent (démonstration)
 docs/            refonte, décisions, prompts, migration
 ```
@@ -243,15 +254,20 @@ git clone -b dev https://github.com/nikodindon/NikoForge.git
 cd NikoForge
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
-.venv/bin/python -m pytest     # 246 tests, ~20 s, aucun GPU requis
+.venv/bin/python -m pytest     # 416 tests, ~1 min, aucun GPU requis
 .venv/bin/ruff check .
 .venv/bin/mypy
 ```
 
 La suite de tests fonctionne **sans serveur LLM** : le client est simulé ou bien on lance
-`tests/fake_server.py`, un vrai serveur HTTP qui parle l'API OpenAI. Les tests marqués
-`known_issue` documentent un défaut identifié (« ce test passera au rouge quand le bug sera
-corrigé, il faudra alors l'inverser ») — voir [`tests/README.md`](tests/README.md).
+`tests/fake_server.py`, un vrai serveur HTTP qui parle l'API OpenAI (streaming SSE, outils
+fragmentés, raisonnement, erreurs programmables). Les tests marqués `known_issue` documentent
+un défaut identifié (« ce test passera au rouge quand le bug sera corrigé, il faudra alors
+l'inverser ») — voir [`tests/README.md`](tests/README.md).
+
+⚠️ Un faux serveur ne reproduit pas la validation faite par un **vrai** gabarit de chat. Un
+défaut d'ordonnancement des messages (`docs/REFONTE.md` C18) n'a été trouvé qu'en exécutant
+l'agent contre un `llama-server` réel. Un test d'intégration optionnel est prévu en phase 6.
 
 ### Ajouter un outil
 
