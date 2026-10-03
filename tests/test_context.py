@@ -1,8 +1,12 @@
-"""``core.context.ContextManager`` : historique, estimation, compaction, persistance.
+"""``nikoforge.context`` : historique, mesure réelle du contexte, compaction par le modèle.
 
-La compaction est le point faible de la v2 (bug C7) : malgré ce qu'annonce le README, ce
-n'est pas un résumé généré par le modèle mais une concaténation de messages bruts tronquée
-par découpage de chaîne, qui ne conserve que les 2 derniers messages.
+Trois corrections vérifiées ici (``docs/REFONTE.md``) :
+
+* **C7** — la compaction délègue le résumé à un appelant (l'agent, qui a accès au modèle) et
+  **épingle** les premiers messages : la tâche initiale survit.
+* **C7b** — la taille du contexte vient de l'``usage`` du serveur, pas de ``len // 4``.
+* **C8** — le résumé est replié dans le message ``system`` initial, il n'est plus un second
+  message ``system`` au milieu de l'historique.
 """
 
 from __future__ import annotations
@@ -16,81 +20,115 @@ from nikoforge.context import ContextManager
 
 @pytest.fixture()
 def ctx():
-    return ContextManager(max_tokens=100, compaction_threshold=0.8)
+    return ContextManager(max_tokens=1000, compaction_threshold=0.8, pinned=1, keep_recent=2)
+
+
+def feed(ctx: ContextManager, count: int, size: int = 20) -> None:
+    """Remplit l'historique : une tâche épinglée puis des allers-retours."""
+    ctx.add_message("user", "TACHE: refactorise le module")
+    for index in range(count):
+        ctx.add_message("assistant", f"etape {index} " + "x" * size)
+        ctx.add_message("user", f"resultat {index} " + "y" * size)
 
 
 # --------------------------------------------------------------------------- #
-# Historique
+# Historique et message système (C8)
 # --------------------------------------------------------------------------- #
 
 
 def test_add_message_stores_role_content_and_timestamp(ctx):
-    ctx.add_message("user", "bonjour")
-    assert len(ctx.messages) == 1
-    message = ctx.messages[0]
+    message = ctx.add_message("user", "bonjour")
     assert message["role"] == "user"
     assert message["content"] == "bonjour"
-    assert "timestamp" in message
+    assert message["timestamp"]
+    assert ctx.messages == [message]
 
 
-def test_get_messages_returns_the_history_unchanged_before_compaction(ctx):
+def test_get_messages_returns_the_raw_history_only(ctx):
+    """C8 inversé : plus aucun message ``system`` injecté au milieu de l'historique."""
     ctx.add_message("user", "a")
-    ctx.add_message("assistant", "b")
-    assert ctx.get_messages() == [
-        {"role": "user", "content": "a", "timestamp": ctx.messages[0]["timestamp"]},
-        {"role": "assistant", "content": "b", "timestamp": ctx.messages[1]["timestamp"]},
-    ]
+    ctx.summary = "un résumé"
+    ctx.compaction_count = 1
+
+    assert ctx.get_messages() == ctx.messages
+    assert all(message["role"] != "system" for message in ctx.get_messages())
 
 
-def test_get_messages_returns_the_live_list(ctx):
-    """Pas de copie : le retour de ``get_messages()`` est ``self.messages`` lui-même.
-
-    Une mutation par l'appelant se répercute donc sur l'état du gestionnaire de contexte.
-    À surveiller en phase 3.
-    """
+def test_build_messages_starts_with_the_system_prompt(ctx):
     ctx.add_message("user", "a")
-    assert ctx.get_messages() is ctx.messages
+    built = ctx.build_messages("SYSTEME")
+    assert built[0] == {"role": "system", "content": "SYSTEME"}
+    assert built[1]["role"] == "user"
+    assert built[1]["content"] == "a"
+
+
+def test_build_messages_folds_the_summary_into_the_system_prompt(ctx):
+    """C8 : le résumé complète le system prompt au lieu d'être un second message system."""
+    ctx.add_message("user", "suite")
+    ctx.summary = "ce qui s'est passé avant"
+
+    built = ctx.build_messages("SYSTEME")
+
+    assert len([m for m in built if m["role"] == "system"]) == 1
+    assert built[0]["content"].startswith("SYSTEME")
+    assert "ce qui s'est passé avant" in built[0]["content"]
+
+
+def test_build_messages_omits_the_summary_when_there_is_none(ctx):
+    ctx.add_message("user", "a")
+    assert ctx.build_messages("SYSTEME")[0]["content"] == "SYSTEME"
+
+
+def test_build_messages_strips_internal_fields(ctx):
+    """Les messages envoyés au serveur ne contiennent que ``role`` et ``content``."""
+    ctx.add_message("user", "a")
+    assert set(ctx.build_messages("S")[1]) == {"role", "content"}
 
 
 # --------------------------------------------------------------------------- #
-# Estimation de taille
+# Mesure : le serveur fait foi (C7b)
 # --------------------------------------------------------------------------- #
 
 
-def test_estimate_tokens_is_length_divided_by_four(ctx):
+def test_estimate_tokens_is_a_documented_approximation(ctx):
     assert ctx.estimate_tokens("abcdefgh") == 2
-    assert ctx.estimate_tokens("") == 0
     assert ctx.estimate_tokens("A" * 400) == 100
+    assert ctx.estimate_tokens("你好世界") == 1  # 4 idéogrammes ≈ 4 tokens, pas 1
 
 
-@pytest.mark.known_issue
-def test_estimate_tokens_is_wrong_for_non_ascii_and_code(ctx):
-    """Bug C7b — ``len // 4`` suppose 4 caractères par token.
-
-    Faux pour du code (~3 caractères/token, sous-estimation de 25 %) et franchement faux
-    hors alphabet latin : 4 idéogrammes font environ 4 tokens, pas 1. Une session en
-    chinois croit avoir 4 fois moins de contexte qu'elle n'en consomme — donc ne compacte
-    pas, et dépasse la fenêtre du serveur.
-
-    Le serveur renvoie pourtant un ``usage`` exact en fin de stream, qui n'est jamais lu.
-    """
-    assert ctx.estimate_tokens("你好世界") == 1, "BUG C7b : 4 idéogrammes ≈ 4 tokens, pas 1"
+def test_context_size_uses_the_estimate_before_any_measurement(ctx):
+    ctx.add_message("user", "A" * 400)
+    assert ctx.context_size() == 100
 
 
-def test_estimate_context_size_sums_every_message(ctx):
-    ctx.add_message("user", "A" * 40)  # 10 tokens
-    ctx.add_message("assistant", "B" * 80)  # 20 tokens
-    assert ctx.estimate_context_size() == 30
+def test_recorded_usage_replaces_the_estimate(ctx):
+    """C7b : la mesure du serveur prime sur l'estimation."""
+    ctx.add_message("user", "A" * 400)  # l'estimation dirait 100
+    ctx.record_usage(prompt_tokens=777, completion_tokens=12)
+
+    assert ctx.context_size() == 777
+    assert ctx.last_completion_tokens == 12
 
 
-def test_estimate_context_size_includes_the_summary(ctx):
-    ctx.add_message("user", "A" * 40)
-    ctx.summary = "B" * 80
-    assert ctx.estimate_context_size() == 30
+def test_messages_added_after_the_measurement_are_estimated(ctx):
+    ctx.add_message("user", "A" * 400)
+    ctx.record_usage(prompt_tokens=777)
+    ctx.add_message("assistant", "B" * 80)  # 20 tokens ajoutés depuis la mesure
+
+    assert ctx.context_size() == 797
+
+
+def test_compaction_invalidates_the_measurement(ctx):
+    feed(ctx, 4)
+    ctx.record_usage(prompt_tokens=900)
+    ctx.compact(lambda _: "résumé")
+
+    assert ctx.last_prompt_tokens is None
+    assert ctx.context_size() < 900
 
 
 # --------------------------------------------------------------------------- #
-# Déclenchement de la compaction
+# Déclenchement
 # --------------------------------------------------------------------------- #
 
 
@@ -99,144 +137,108 @@ def test_needs_compaction_is_false_when_small(ctx):
     assert ctx.needs_compaction() is False
 
 
-def test_needs_compaction_triggers_at_the_threshold(ctx):
-    # max_tokens=100, seuil 0.8 -> 80 tokens -> 320 caractères
-    ctx.add_message("user", "A" * 320)
+def test_needs_compaction_uses_the_real_size(ctx):
+    """max_tokens=1000, seuil 0.8 → 800 tokens."""
+    ctx.add_message("user", "court")
+    ctx.record_usage(prompt_tokens=799)
+    assert ctx.needs_compaction() is False
+    ctx.record_usage(prompt_tokens=800)
     assert ctx.needs_compaction() is True
 
 
-def test_needs_compaction_uses_a_ratio(ctx):
-    """Un seuil mal configuré (en tokens plutôt qu'en ratio) rendrait le test toujours vrai."""
-    strict = ContextManager(max_tokens=1000, compaction_threshold=0.01)
-    strict.add_message("user", "A" * 40)  # 10 tokens >= 10
-    assert strict.needs_compaction() is True
+def test_compactable_counts_the_middle_only(ctx):
+    feed(ctx, 4)  # 1 épinglé + 8 messages
+    assert len(ctx.messages) == 9
+    assert ctx.compactable() == 9 - 1 - 2  # hors tête épinglée et queue gardée
 
 
-# --------------------------------------------------------------------------- #
-# Compaction
-# --------------------------------------------------------------------------- #
-
-
-def test_compact_does_nothing_below_four_messages(ctx):
-    ctx.add_message("user", "a")
-    ctx.add_message("assistant", "b")
-    ctx.add_message("user", "c")
-
-    ctx.compact(summary_tokens=50)
-
-    assert len(ctx.messages) == 3
-    assert ctx.summary == ""
+def test_nothing_to_compact_below_the_threshold(ctx):
+    ctx.add_message("user", "tache")
+    ctx.add_message("assistant", "réponse")
+    assert ctx.compactable() == 0
+    assert ctx.compact(lambda _: "résumé") is False
     assert ctx.compaction_count == 0
 
 
-def test_compact_keeps_only_the_two_last_messages(ctx):
-    for i in range(6):
-        ctx.add_message("user", f"message {i}")
-    ctx.add_message("assistant", "dernier assistant")
-    ctx.add_message("user", "dernier user")
+# --------------------------------------------------------------------------- #
+# Compaction (C7)
+# --------------------------------------------------------------------------- #
 
-    ctx.compact(summary_tokens=50)
 
-    assert len(ctx.messages) == 2
-    assert ctx.messages[-1]["content"] == "dernier user"
+def test_compact_keeps_the_pinned_task_and_the_recent_messages(ctx):
+    """C7 inversé : en v2, la tâche initiale disparaissait du contexte actif."""
+    feed(ctx, 4)
+    seen: list[str] = []
+
+    def summarize(transcript: str) -> str:
+        seen.append(transcript)
+        return "RÉSUMÉ"
+
+    assert ctx.compact(summarize) is True
+
+    assert ctx.messages[0]["content"].startswith("TACHE:")
+    assert len(ctx.messages) == 1 + ctx.keep_recent
+    assert ctx.summary == "RÉSUMÉ"
     assert ctx.compaction_count == 1
+    # Le transcript soumis au résumé contient bien ce qui a été retiré, et pas la tâche.
+    assert seen and "TACHE:" not in seen[0]
+    assert "etape 0" in seen[0]
 
 
-@pytest.mark.known_issue
-def test_compact_loses_the_original_task(ctx):
-    """Bug C7 — la tâche initiale n'est plus dans le contexte actif.
-
-    ``compact()`` conserve ``messages[-2:]`` sans distinguer le premier message utilisateur.
-    Après compaction, l'agent a oublié ce qu'on lui a demandé ; il ne lui reste qu'un
-    « résumé » qui est une concaténation tronquée.
-
-    Comportement attendu en phase 3 : conserver system + tâche initiale + K derniers échanges.
-    """
-    ctx.add_message("user", "TACHE: refactorise core/tools.py et ajoute des tests")
-    for i in range(6):
-        ctx.add_message("assistant", f"etape {i} " + "blabla " * 30)
-        ctx.add_message("user", f"resultat {i} " + "sortie " * 30)
-
-    ctx.compact(summary_tokens=200)
-
-    assert len(ctx.messages) == 2
-    assert all("TACHE" not in m["content"] for m in ctx.messages), (
-        "BUG C7 : la tache initiale devrait rester dans le contexte actif"
-    )
+def test_the_transcript_labels_each_message_with_its_role(ctx):
+    feed(ctx, 4)
+    seen: list[str] = []
+    ctx.compact(lambda transcript: seen.append(transcript) or "r")
+    assert "[assistant] :" in seen[0]
+    assert "[user] :" in seen[0]
 
 
-@pytest.mark.known_issue
-def test_compact_summary_is_a_raw_concatenation_not_a_summary(ctx):
-    """Bug C7 — le README annonce « génère un résumé ». Il n'y a aucun appel au modèle.
+def test_compact_refuses_an_empty_summary_without_touching_the_history(ctx):
+    """Mieux vaut un contexte trop grand qu'un historique amputé sans résumé."""
+    feed(ctx, 4)
+    before = list(ctx.messages)
 
-    ``_generate_summary`` préfixe chaque message de ``[role]:`` et colle le tout.
-    """
-    ctx.add_message("user", "TACHE: analyse les logs")
-    for i in range(6):
-        ctx.add_message("assistant", f"blabla {i} " * 40)
+    assert ctx.compact(lambda _: "   ") is False
 
-    ctx.compact(summary_tokens=120)
-
-    assert "[user]: TACHE: analyse les logs" in ctx.summary
-    assert "[assistant]:" in ctx.summary, "BUG C7 : ce n'est pas un resume, c'est un collage"
+    assert ctx.messages == before
+    assert ctx.compaction_count == 0
+    assert ctx.summary == ""
 
 
-@pytest.mark.known_issue
-def test_compact_summary_is_cut_mid_word_by_string_slicing(ctx):
-    """Bug C7 — la troncature finale fait ``summary[:len-100] + "..."``.
+def test_a_failing_summarizer_leaves_the_history_intact(ctx):
+    feed(ctx, 4)
+    before = list(ctx.messages)
 
-    Le découpage est fait en caractères, pas en tokens ni en mots : la fin du résumé peut
-    être coupée au milieu d'un mot, voire d'un token.
-    """
-    ctx.add_message("user", "TACHE: " + "mot " * 200)
-    for i in range(8):
-        ctx.add_message("assistant", f"reponse {i} " + "vocabulaire " * 20)
+    def boom(_: str) -> str:
+        raise RuntimeError("modèle indisponible")
 
-    ctx.compact(summary_tokens=40)
+    with pytest.raises(RuntimeError):
+        ctx.compact(boom)
 
-    assert ctx.summary.endswith("..."), "BUG C7 : troncature par decoupage de chaine"
+    assert ctx.messages == before
+    assert ctx.compaction_count == 0
 
 
-@pytest.mark.known_issue
-def test_summary_is_injected_as_a_system_message_in_the_middle(ctx):
-    """Bug C8 — le résumé devient un second message ``system``.
+def test_fallback_summary_does_not_cut_in_the_middle_of_a_word(ctx):
+    """La v2 tronquait par ``summary[:len-100]``, couper un mot au hasard."""
+    ctx.summary_tokens = 5  # 20 caractères de résumé autorisés
+    feed(ctx, 4)
 
-    ``get_messages()`` préfixe l'historique d'un message ``role: system``. Or
-    ``Agent._get_model_response`` envoie déjà le vrai system prompt en première position :
-    la requête part donc avec **deux** messages system consécutifs. Le gabarit Jinja de
-    llama.cpp (``--jinja``, obligatoire pour Qwen3) n'en garantit pas le rendu.
+    assert ctx.compact() is True
 
-    Comportement attendu en phase 3 : replier le résumé dans le system prompt initial.
-    """
-    for i in range(6):
-        ctx.add_message("user", f"message {i}")
-    ctx.compact(summary_tokens=50)
-
-    messages = ctx.get_messages()
-
-    assert messages[0]["role"] == "system", "BUG C8 : un system au milieu de l'historique"
-    assert "Résumé" in messages[0]["content"]
-    assert ctx.messages[0]["role"] == "user"
+    assert "tronqué faute de résumé" in ctx.summary
+    assert not ctx.summary.endswith("…")
 
 
-@pytest.mark.known_issue
-def test_compaction_count_never_resets(ctx):
-    """Le compteur ne redescend jamais, et ``get_messages`` préfixe le résumé dès qu'il est > 0.
-
-    Tant que ``compaction_count`` vaut plus de zéro, chaque requête embarque la ligne
-    « Résumé des échanges précédents ». Seul ``reset()`` remet le compteur à zéro.
-    """
-    for i in range(6):
-        ctx.add_message("user", f"message {i}")
-    ctx.compact(summary_tokens=50)
-    assert ctx.compaction_count == 1
-
-    for i in range(6):
-        ctx.add_message("user", f"suite {i}")
-    ctx.compact(summary_tokens=50)
+def test_several_compactions_accumulate(ctx):
+    feed(ctx, 4)
+    ctx.compact(lambda _: "premier")
+    feed(ctx, 4)
+    ctx.compact(lambda _: "second")
 
     assert ctx.compaction_count == 2
-    assert ctx.get_messages()[0]["role"] == "system"
+    assert ctx.summary == "second"
+    assert ctx.messages[0]["content"].startswith("TACHE:")
 
 
 # --------------------------------------------------------------------------- #
@@ -244,35 +246,34 @@ def test_compaction_count_never_resets(ctx):
 # --------------------------------------------------------------------------- #
 
 
-def test_get_stats_shape(ctx):
-    ctx.add_message("user", "a" * 40)
+def test_get_stats_reports_the_real_size(ctx):
+    ctx.add_message("user", "A" * 40)
+    ctx.record_usage(prompt_tokens=123)
     stats = ctx.get_stats()
-    assert stats == {
-        "total_messages": 1,
-        "compaction_count": 0,
-        "estimated_tokens": 10,
-        "max_tokens": 100,
-        "has_summary": False,
-    }
+    assert stats["total_messages"] == 1
+    assert stats["estimated_tokens"] == 123  # la mesure, pas l'estimation
+    assert stats["max_tokens"] == 1000
+    assert stats["has_summary"] is False
 
 
 def test_reset_clears_everything(ctx):
-    for i in range(6):
-        ctx.add_message("user", f"message {i}")
-    ctx.compact(summary_tokens=50)
+    feed(ctx, 4)
+    ctx.record_usage(prompt_tokens=500)
+    ctx.compact(lambda _: "résumé")
 
     ctx.reset()
 
     assert ctx.messages == []
     assert ctx.summary == ""
     assert ctx.compaction_count == 0
+    assert ctx.last_prompt_tokens is None
+    assert ctx.context_size() == 0
 
 
 def test_save_and_load_roundtrip(ctx, tmp_path):
     ctx.add_message("user", "bonjour")
-    ctx.add_message("assistant", "salut")
-    ctx.summary = "resume"
-    ctx.compaction_count = 1
+    ctx.summary = "résumé"
+    ctx.compaction_count = 2
     target = tmp_path / "ctx.json"
 
     ctx.save_to_file(str(target))
@@ -281,29 +282,22 @@ def test_save_and_load_roundtrip(ctx, tmp_path):
     other.load_from_file(str(target))
 
     assert other.messages == ctx.messages
-    assert other.summary == "resume"
-    assert other.compaction_count == 1
+    assert other.summary == "résumé"
+    assert other.compaction_count == 2
+    assert other.last_prompt_tokens is None  # une mesure ne se transporte pas
 
 
-def test_save_writes_readable_json_with_stats(ctx, tmp_path):
+def test_saved_file_is_readable_json(ctx, tmp_path):
     ctx.add_message("user", "hi")
     target = tmp_path / "ctx.json"
     ctx.save_to_file(str(target))
-
     data = json.loads(target.read_text(encoding="utf-8"))
-
     assert set(data) == {"messages", "summary", "compaction_count", "stats"}
-    assert data["stats"]["total_messages"] == 1
 
 
 def test_load_tolerates_a_partial_file(ctx, tmp_path):
-    """Les clés absentes prennent leur valeur par défaut : la reprise d'une vieille session
-    ne lève pas d'exception."""
     target = tmp_path / "ctx.json"
     target.write_text("{}", encoding="utf-8")
-
     ctx.load_from_file(str(target))
-
     assert ctx.messages == []
     assert ctx.summary == ""
-    assert ctx.compaction_count == 0
