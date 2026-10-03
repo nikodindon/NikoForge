@@ -21,10 +21,11 @@ import dataclasses
 import sys
 import time
 from pathlib import Path
-from typing import Sequence, TextIO
+from typing import Callable, Sequence, TextIO
 
 from . import __version__
 from .config import Config, ConfigError, load_config, render_toml
+from .protocol import ToolCall
 from .server import pick_model, probe, suggest_server_command
 from .ui import NikoForgeUI
 
@@ -58,7 +59,13 @@ llama-server sur http://127.0.0.1:8080/v1 et le modèle est découvert automatiq
 
 
 def build_parser() -> argparse.ArgumentParser:
-    common = argparse.ArgumentParser(add_help=False)
+    # `argument_default=SUPPRESS` est indispensable, et non cosmétique : depuis Python 3.9,
+    # argparse exécute chaque sous-commande dans un espace de noms NEUF puis recopie toutes
+    # ses valeurs dans le parent — y compris ses défauts. Sans SUPPRESS,
+    # `nikoforge --base-url http://ailleurs doctor` perdait `--base-url` (le sous-parser
+    # réécrivait None par-dessus). Avec SUPPRESS, une option non fournie n'existe simplement
+    # pas dans l'espace de noms, et les surcharges utilisent `getattr(..., None)`.
+    common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
     common.add_argument(
         "-c", "--config", metavar="FICHIER", help="fichier de configuration TOML à charger"
     )
@@ -276,14 +283,41 @@ def _print_help(stream: TextIO) -> None:
     )
 
 
-def _run_once(config: Config, prompt: str, stream: TextIO) -> int:
-    from .agent import Agent
+def _make_approver(stream: TextIO, policy) -> Callable[[ToolCall], bool]:
+    """Demande confirmation avant une action qui modifie le disque ou exécute une commande.
 
-    agent = Agent(config)
+    Corrige C9 : en v2, la question « Continuer ? (o/n/q) » était posée **après** que les
+    outils aient été exécutés. Autoriser ne servait donc à rien.
+    """
+
+    def approve(call: ToolCall) -> bool:
+        rendered = ", ".join(f"{key}={value!r}" for key, value in call.arguments.items())
+        print(f"\n⚠  {call.name}({rendered})", file=stream)
+        try:
+            answer = input("   autoriser ? (o = oui, a = toujours, n = non) [o] : ")
+        except (EOFError, KeyboardInterrupt):
+            print(file=stream)
+            return False
+        answer = answer.strip().lower()
+        if answer in {"a", "toujours"}:
+            policy.allow_always(call.name)
+            print(f"   ({call.name} sera autorisé pour le reste de la session)", file=stream)
+            return True
+        return answer in {"", "o", "oui", "y", "yes"}
+
+    return approve
+
+
+def _run_once(config: Config, prompt: str, stream: TextIO) -> int:
+    from .agent import Agent, ApprovalPolicy
+
+    # `-p` : la consigne a été tapée explicitement, donc elle s'exécute sans reprendre
+    # confirmation à chaque écriture. Le mode interactif, lui, demande (voir _run_repl).
+    agent = Agent(config, policy=ApprovalPolicy(auto_approve=True), stream=stream, echo=False)
     NikoForgeUI.print_task(prompt)
 
     started = time.monotonic()
-    result = agent.run(prompt, interactive=False)
+    result = agent.run(prompt)
     elapsed = time.monotonic() - started
 
     stats = agent.get_stats()
@@ -294,23 +328,46 @@ def _run_once(config: Config, prompt: str, stream: TextIO) -> int:
         iteration=stats["iteration"],
         elapsed_time=elapsed,
     )
+
+    if result.text:
+        print(result.text, file=stream)
+
     NikoForgeUI.print_stats(stats)
 
-    if not result:
-        print("✖ aucune réponse du modèle — rien n'a été produit.", file=stream)
+    if result.stop_reason == "error":
+        print(f"✖ {result.error}", file=stream)
+        return EXIT_FAILURE
+    if not result.ok:
+        detail = {
+            "no_response": "le modèle n'a rien produit",
+            "max_iterations": (
+                f"budget d'itérations épuisé ({result.iterations}) après "
+                f"{result.tool_calls} appel(s) d'outil — le travail déjà effectué reste sur "
+                "le disque. Augmentez --max-iterations, ou découpez la tâche"
+            ),
+            "cancelled": "tâche interrompue",
+            "denied": "action refusée",
+        }.get(result.stop_reason, result.stop_reason)
+        print(f"✖ {detail}.", file=stream)
+        print(f"  ({result.summary()})", file=stream)
         return EXIT_FAILURE
 
     NikoForgeUI.print_completion()
     return EXIT_OK
 
 
-def _run_repl(config: Config, stream: TextIO) -> int:
-    from .agent import Agent
+def _run_repl(config: Config, stream: TextIO, assume_yes: bool) -> int:
+    from .agent import Agent, ApprovalPolicy
 
     if stream.isatty():
         NikoForgeUI.clear_screen()
 
-    agent = Agent(config)
+    # Sans terminal, on ne peut pas poser la question : on l'annonce au lieu de bloquer.
+    interactive_input = stream.isatty() and not assume_yes
+    policy = ApprovalPolicy(auto_approve=assume_yes or not stream.isatty())
+    approver = _make_approver(stream, policy) if interactive_input else None
+
+    agent = Agent(config, policy=policy, approver=approver, stream=stream)
     NikoForgeUI.print_logo()
     NikoForgeUI.print_header(
         model=config.llm.model,
@@ -349,10 +406,18 @@ def _run_repl(config: Config, stream: TextIO) -> int:
 
         NikoForgeUI.print_task(task)
         try:
-            agent.run(task, interactive=False)
+            result = agent.run(task)
         except KeyboardInterrupt:
-            print(file=stream)
-            print("(tour interrompu)", file=stream)
+            print("\n(tour interrompu)\n", file=stream)
+            continue
+
+        print(file=stream)
+        if result.stop_reason == "error":
+            print(f"✖ {result.error}", file=stream)
+        elif not result.ok:
+            print(f"✖ {result.summary()}", file=stream)
+        else:
+            print(f"✓ {result.summary()}", file=stream)
 
         stats = agent.get_stats()
         NikoForgeUI.print_status_bar(
@@ -394,7 +459,7 @@ def main(argv: Sequence[str] | None = None, stream: TextIO | None = None) -> int
         )
 
     try:
-        config = load_config(args.config, _overrides(args))
+        config = load_config(getattr(args, "config", None), _overrides(args))
     except ConfigError as exc:
         print(f"✖ configuration : {exc}", file=sys.stderr)
         return EXIT_USAGE
@@ -422,7 +487,7 @@ def main(argv: Sequence[str] | None = None, stream: TextIO | None = None) -> int
     if args.prompt:
         return _run_once(config, args.prompt, out)
 
-    return _run_repl(config, out)
+    return _run_repl(config, out, assume_yes=bool(getattr(args, "yes", False)))
 
 
 if __name__ == "__main__":  # pragma: no cover
