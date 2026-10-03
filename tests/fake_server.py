@@ -22,8 +22,9 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Iterable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Iterable
+from typing import Any
 
 DEFAULT_MODEL = "modele-de-test"
 DEFAULT_REPLY = "Bonjour ! Je suis un faux modèle local."
@@ -45,7 +46,7 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
     @property
-    def server_state(self) -> "FakeLlamaServer":
+    def server_state(self) -> FakeLlamaServer:
         return self.server.fake  # type: ignore[attr-defined]
 
     # -- utilitaires ------------------------------------------------------ #
@@ -150,7 +151,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     # -- réponses --------------------------------------------------------- #
 
-    def _stream(self, state: "FakeLlamaServer", model: str) -> None:
+    def _stream(self, state: FakeLlamaServer, model: str) -> None:
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -212,7 +213,7 @@ class FakeLlamaServer:
 
     # -- cycle de vie ----------------------------------------------------- #
 
-    def start(self) -> "FakeLlamaServer":
+    def start(self) -> FakeLlamaServer:
         self._httpd = _Server(("127.0.0.1", 0), _Handler)
         self._httpd.fake = self  # type: ignore[attr-defined]
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
@@ -228,7 +229,7 @@ class FakeLlamaServer:
         self._httpd = None
         self._thread = None
 
-    def __enter__(self) -> "FakeLlamaServer":
+    def __enter__(self) -> FakeLlamaServer:
         return self.start()
 
     def __exit__(self, *exc_info: object) -> None:

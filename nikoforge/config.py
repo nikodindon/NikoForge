@@ -20,9 +20,10 @@ import dataclasses
 import os
 import tomllib
 import typing
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 APP_NAME = "nikoforge"
 

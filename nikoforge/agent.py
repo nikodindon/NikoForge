@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, TextIO
+from typing import Any, TextIO
 
 from .config import Config
 from .context import ContextManager

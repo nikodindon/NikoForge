@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 import pytest
+from conftest import UNREACHABLE_BASE_URL, config_for
 
 from nikoforge.config import default_config
 from nikoforge.doctor import (
@@ -34,7 +35,6 @@ from nikoforge.doctor import (
 )
 from nikoforge.server import Probe, probe
 
-from conftest import UNREACHABLE_BASE_URL, config_for
 FAKE = "modele-de-test"
 
 

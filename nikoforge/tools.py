@@ -4,17 +4,17 @@ Outils de base pour NikoForge
 
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class ToolResult:
     """Résultat d'un outil"""
-    def __init__(self, success: bool, data: Any, error: Optional[str] = None):
+    def __init__(self, success: bool, data: Any, error: str | None = None):
         self.success = success
         self.data = data
         self.error = error
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "data": self.data,
@@ -35,7 +35,7 @@ class Tools:
             if not full_path.exists():
                 return ToolResult(False, None, f"Fichier non trouvé: {path}")
 
-            with open(full_path, 'r', encoding='utf-8') as f:
+            with open(full_path, encoding='utf-8') as f:
                 content = f.read()
 
             return ToolResult(True, content)
@@ -62,7 +62,7 @@ class Tools:
             if not full_path.exists():
                 return ToolResult(False, None, f"Fichier non trouvé: {path}")
 
-            with open(full_path, 'r', encoding='utf-8') as f:
+            with open(full_path, encoding='utf-8') as f:
                 current_content = f.read()
 
             if old_content not in current_content:

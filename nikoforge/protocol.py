@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 CDATA_OPEN = "<![CDATA["
 CDATA_CLOSE = "]]>"

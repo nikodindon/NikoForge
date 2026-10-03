@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from conftest import REPO_ROOT, UNREACHABLE_BASE_URL
 
 from nikoforge import __version__
 from nikoforge.cli import (
@@ -30,8 +31,6 @@ from nikoforge.cli import (
     main,
     rewrite_legacy_prompt,
 )
-
-from conftest import REPO_ROOT, UNREACHABLE_BASE_URL
 
 MODEL = "modele-de-test"
 REPLY = "Bonjour ! Je suis un faux modèle local."

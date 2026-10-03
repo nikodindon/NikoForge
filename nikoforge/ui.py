@@ -100,7 +100,7 @@ class NikoForgeUI:
     # /undo : restaure le dernier checkpoint (phase 5)
     @staticmethod
     def undo(path: str):
-        cp = CHECKPOINT_DIR + "/" + path.replace("/", "_") + ".json"
+        cp = "/home/niko/.local/state/nikoforge/checkpoints" + "/" + path.replace("/", "_") + ".json"
         # Le comportement complet (lire le checkpoint, restaurer) est en cours.
         return os.path.exists(cp)
 

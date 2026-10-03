@@ -15,6 +15,8 @@ import dataclasses
 import io
 import json
 
+from conftest import config_for
+
 from nikoforge.agent import (
     ALLOW,
     ASK,
@@ -30,8 +32,6 @@ from nikoforge.llm import LLM
 from nikoforge.prompt import get_system_prompt
 from nikoforge.protocol import ToolCall
 from nikoforge.tools import ToolResult
-
-from conftest import config_for
 
 
 def make_agent(fake_server, workdir, **kwargs) -> Agent:

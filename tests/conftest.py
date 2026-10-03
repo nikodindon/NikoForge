@@ -24,11 +24,11 @@ for entry in (REPO_ROOT, TESTS_DIR):
     if str(entry) not in sys.path:
         sys.path.insert(0, str(entry))
 
+from fake_server import FakeLlamaServer  # noqa: E402
+
 from nikoforge.agent import Agent  # noqa: E402
 from nikoforge.config import AgentConfig, Config, ContextConfig, LLMConfig  # noqa: E402
 from nikoforge.tools import Tools  # noqa: E402
-
-from fake_server import FakeLlamaServer  # noqa: E402
 
 #: Port « discard ». Rien n'y écoute : toute tentative de connexion échoue immédiatement.
 #: Garantit qu'un test qui atteindrait le réseau échoue vite, au lieu de parler à un

@@ -15,8 +15,9 @@ Trois corrections par rapport à la v2 (``docs/REFONTE.md``) :
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
-from typing import Any, Callable, Dict, Iterable, List, Mapping
+from typing import Any
 
 #: Nombre de caractères par token utilisé par l'estimation de repli. Constante nommée pour
 #: que sa grossièreté soit visible partout où elle sert.
@@ -46,7 +47,7 @@ class ContextManager:
         self.pinned = pinned
         self.keep_recent = keep_recent
 
-        self.messages: List[Dict[str, Any]] = []
+        self.messages: list[dict[str, Any]] = []
         self.summary: str = ""
         self.compaction_count = 0
 
@@ -60,7 +61,7 @@ class ContextManager:
     # Historique
     # ------------------------------------------------------------------ #
 
-    def add_message(self, role: str, content: str, **extra: Any) -> Dict[str, Any]:
+    def add_message(self, role: str, content: str, **extra: Any) -> dict[str, Any]:
         """Ajoute un message et le retourne.
 
         ``extra`` porte les champs du protocole OpenAI : ``tool_calls`` pour un message
@@ -69,7 +70,7 @@ class ContextManager:
         ne peut pas relier un appel à sa réponse — le modèle voit des tours vides et
         rappelle l'outil indéfiniment (constaté en usage réel, voir ``docs/REFONTE.md`` C18).
         """
-        message: Dict[str, Any] = {
+        message: dict[str, Any] = {
             "role": role,
             "content": content,
             "timestamp": datetime.now().isoformat(),
@@ -78,7 +79,7 @@ class ContextManager:
         self.messages.append(message)
         return message
 
-    def get_messages(self) -> List[Dict[str, Any]]:
+    def get_messages(self) -> list[dict[str, Any]]:
         """L'historique brut, sans le résumé.
 
         Le résumé ne s'insère plus ici (il était un second message ``system`` au milieu de
@@ -86,7 +87,7 @@ class ContextManager:
         """
         return self.messages
 
-    def build_messages(self, system_prompt: str) -> List[Dict[str, Any]]:
+    def build_messages(self, system_prompt: str) -> list[dict[str, Any]]:
         """Messages envoyés au modèle : le system prompt (résumé inclus) puis l'historique.
 
         Seul ``timestamp`` est retiré : les champs du protocole (``tool_calls``,
@@ -101,7 +102,7 @@ class ContextManager:
                 f"{self.summary}"
             )
 
-        built: List[Dict[str, Any]] = [{"role": "system", "content": system}]
+        built: list[dict[str, Any]] = [{"role": "system", "content": system}]
         for message in self.messages:
             payload = {key: value for key, value in message.items() if key != "timestamp"}
             payload.setdefault("content", "")
@@ -228,7 +229,7 @@ class ContextManager:
     # Persistance et statistiques
     # ------------------------------------------------------------------ #
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         return {
             "total_messages": len(self.messages),
             "compaction_count": self.compaction_count,
@@ -248,7 +249,7 @@ class ContextManager:
             json.dump(data, handle, indent=2, ensure_ascii=False)
 
     def load_from_file(self, path: str) -> None:
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
 
         self.messages = data.get("messages", [])

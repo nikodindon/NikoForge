@@ -20,8 +20,9 @@ import argparse
 import dataclasses
 import sys
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence, TextIO
+from typing import TextIO
 
 from . import __version__
 from .config import Config, ConfigError, load_config, render_toml

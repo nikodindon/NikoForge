@@ -9,8 +9,9 @@ commande ``llama-server`` à copier plutôt que d'échouer.
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import TextIO
 
 from .config import Config, write_config
 from .server import (

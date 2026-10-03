@@ -17,7 +17,6 @@ import pytest
 from nikoforge import ui as ui_module
 from nikoforge.ui import NikoForgeUI
 
-
 # --------------------------------------------------------------------------- #
 # Messages simples
 # --------------------------------------------------------------------------- #

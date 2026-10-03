@@ -13,12 +13,13 @@ from __future__ import annotations
 import types
 
 import pytest
+from conftest import UNREACHABLE_BASE_URL, config_for
 
 from nikoforge import llm as llm_module
 from nikoforge.config import apply_overrides, default_config
 from nikoforge.llm import (
-    ContextTooLong,
     LLM,
+    ContextTooLong,
     LLMError,
     ModelNotFound,
     RequestTimedOut,
@@ -32,8 +33,6 @@ from nikoforge.llm import (
     translate_error,
 )
 from nikoforge.protocol import ToolCall
-
-from conftest import UNREACHABLE_BASE_URL, config_for
 
 MODEL = "modele-de-test"
 
