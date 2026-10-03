@@ -314,7 +314,7 @@ def _make_approver(stream: TextIO, policy) -> Callable[[ToolCall], bool]:
     return approve
 
 
-def _run_once(config: Config, prompt: str, stream: TextIO) -> int:
+def _run_once(config: Config, prompt: str, stream: TextIO, stream_mode: bool = False) -> int:
     from .agent import Agent, ApprovalPolicy
 
     # `-p` : la consigne a été tapée explicitement, donc elle s'exécute sans reprendre
@@ -337,6 +337,8 @@ def _run_once(config: Config, prompt: str, stream: TextIO) -> int:
 
     if result.text:
         print(result.text, file=stream)
+        if stream_mode:
+            stream.flush()
 
     NikoForgeUI.print_stats(stats)
 
@@ -491,7 +493,7 @@ def main(argv: Sequence[str] | None = None, stream: TextIO | None = None) -> int
         return exit_code
 
     if args.prompt:
-        return _run_once(config, args.prompt, out)
+        return _run_once(config, args.prompt, out, stream_mode=getattr(args, 'stream', False))
 
     return _run_repl(config, out, assume_yes=bool(getattr(args, "yes", False)))
 
