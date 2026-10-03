@@ -96,6 +96,8 @@ comme avant (aucune modification de comportement : seuls des imports morts et de
       `/v1/models`, écrit le TOML, propose la commande `llama-server` si absent).
 - [ ] `nikoforge doctor` : diagnostic (python, version, config, serveur, modèle, contexte, outils,
       skills, workdir) avec codes de sortie exploitables.
+- [ ] Supprimer `requirements.txt`, redondant désormais que `pyproject.toml` déclare
+      `dependencies` : deux sources de vérité pour les dépendances, c'est une dérive garantie.
 - [ ] `--version`, `--print-config`, `--print-system-prompt`.
 - [ ] Préflight : si le serveur ne répond pas, message clair + commande suggérée, avant toute
       itération. **Corrige B2.**
@@ -184,6 +186,9 @@ comme avant (aucune modification de comportement : seuls des imports morts et de
 - [ ] `skills.py` : chargement réel de `skills/*.md`, découverte, injection, `/skill <nom>`.
       **Corrige C12.**
 - [ ] `AGENTS.md` / `CLAUDE.md` lus dans le workdir et injectés. **Corrige C15.**
+- [ ] **Réécrire `AGENTS.md`** : il décrit aujourd'hui un format `[outil: nom_outil]` que le
+      code n'a jamais implémenté (le format réel est XML, et il change en phase 3). C'est le
+      premier fichier lu par tout agent travaillant sur ce dépôt — il doit dire la vérité.
 
 **Critère de sortie** — dogfooding, à exécuter réellement :
 1. `nikoforge --cwd /home/niko/projects/NikoForge -p "ajoute une fonction foo() dans
