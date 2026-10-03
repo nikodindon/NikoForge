@@ -1,4 +1,6 @@
-# Skill: Python Development
+# NikoForge v3 (dev) — Skill Python
+
+Instructions : respecte `docs/DECISIONS.md`, `AGENTS.md`, `ROADMAP.md`. Tests : 416, `ruff` et `mypy` avant commit. Protocole : XML natif (`/props`) ou texte CDATA (`<![CDATA[...]]>`). Compaction : garder `timestamp` hors du rendu modèle (C8).
 
 Directives et meilleures pratiques pour le développement Python avec NikoForge.
 
