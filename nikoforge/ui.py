@@ -109,8 +109,10 @@ class NikoForgeUI:
         """Retourne le mode d'affichage : plain (pas d'emoji/ANSI), rich (TTY), json (NDJSON)."""
         # La logique réelle (détection TTY, --plain, --json) est dans cli.py
 
-    # Session : persistance JSONL append-only (ROADMAP.md phase 5)
-    SESSION_DIR = "~/.local/share/nikoforge/sessions"
+    # Phase 5 : mode --stream (affichage en temps réel du travail)
+    # Stubs presents dans cli.py ; logique complete en phase 6.
+    # Voir agent.py : _say(), _run_call() impriment chaque etape (outil, resultat, refus).
+    SESSION_DIR = "/home/niko/.local/share/nikoforge/sessions"
     CHECKPOINT_DIR = "/home/niko/.local/state/nikoforge/checkpoints"
 
     @staticmethod

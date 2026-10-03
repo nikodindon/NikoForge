@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tetris - NikoForge</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    flex-direction: column;
+    padding: 20px;
+  }
+  .game-container {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  canvas {
+    border: 3px solid #0f3a5f;
+    background: #0a0a1a;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    border-radius: 4px;
+  }
+  .info {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 200px;
+  }
+  .panel {
+    background: #0f3a5f;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+  .panel h2 {
+    margin-bottom: 10px;
+    font-size: 18px;
+    border-bottom: 2px solid #0f5f8f;
+    padding-bottom: 5px;
+  }
+  .panel p { margin: 8px 0; font-size: 14px; }
+  .panel span { color: #4fd1ff; font-weight: bold; }
+  button {
+    background: #0f5f8f;
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover { background: #0f7fad; }
+  .controls {
+    font-size: 12px;
+    line-height: 1.8;
+    color: #aaa;
+    margin-top: 10px;
+    border-top: 1px solid #0f5f8f;
+    padding-top: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="game-container">
+    <canvas id="board" width="240" height="400"></canvas>
+    <div class="info">
+      <div class="panel">
+        <h2>SCORE</h2>
+        <p>Lignes: <span id="lines">0</span></p>
+        <p>Score: <span id="score">0</span></p>
+        <p>Niveau: <span id="level">1</span></p>
+      </div>
+      <button id="startBtn">Démarrer</button>
+      <div class="controls">
+        <p><strong>Contrôles :</strong></p>
+        <p>← → : Déplacer</p>
+        <p>↓ : Descendre</p>
+        <p>↑ : Rotation</p>
+        <p>P : Pause</p>
+      </div>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+
+    const COLS = 10;
+    const ROWS = 20;
+    const CELL = 24;
+
+    // Couleurs des pièces
+    const COLORS = {
+      'I': '#00f0f0',
+      'O': '#f0f000',
+      'T': '#a000f0',
+      'S': '#00f000',
+      'Z': '#f00000',
+      'J': '#0000f0',
+      'L': '#f0a000'
+    };
+
+    // Formes des pièces
+    const SHAPES = {
+      'I': [[1,1,1,1]],
+      'O': [[1,1],[1,1]],
+      'T': [[0,1,0],[1,1,1]],
+      'S': [[0,1,1],[1,1,0]],
+      'Z': [[1,1,0],[0,1,1]],
+      'J': [[1,0,0],[1,1,1]],
+      'L': [[0,0,1],[1,1,1]]
+    };
+
+    const G = {
+      board: [],
+      piece: null,
+      current: null,
+      score: 0,
+      lines: 0,
+      level: 1,
+      running: false,
+      paused: false
+    };
+
+    // Initialise le plateau
+    function initBoard() {
+      G.board = [];
+      for (let i = 0; i < ROWS; i++) {
+        G.board.push(new Array(COLS).fill(null));
+      }
+    }
+
+    // Représentation d'une pièce
+    class Piece {
+      constructor(type) {
+        this.type = type;
+        this.color = COLORS[type];
+        this.shape = SHAPES[type];
+        this.x = Math.floor(COLS / 2) - 1;
+        this.y = 0;
+      }
+      rotate() {
+        const shape = this.shape;
+        const rows = shape.length, cols = shape[0].length;
+        const rotated = [];
+        for (let j = 0; j < cols; j++) {
+          const row = [];
+          for (let i = rows - 1; i >= 0; i--) {
+            row.push(shape[i][j]);
+          }
+          rotated.push(row);
+        }
+        return rotated;
+      }
+    }
+
+    // Crée une nouvelle pièce
+    function newPiece() {
+      const types = ['I','O','T','S','Z','J','L'];
+      const type = types[Math.floor(Math.random() * 7)];
+      return new Piece(type);
+    }
+
+    // Vérifie la validité d'une position
+    function isValidPosition(shape, offsetX, offsetY) {
+      for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+          if (shape[y][x]) {
+            const nx = offsetX + x;
+            const ny = offsetY + y;
+            if (nx < 0 || nx >= COLS || ny >= ROWS) return false;
+            if (ny >= 0 && G.board[ny][nx]) return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    // Ép la pièce sur le plateau
+    function pieceLock() {
+      const shape = G.current.shape;
+      for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+          if (shape[y][x]) {
+            const nx = G.current.x + x;
+            const ny = G.current.y + y;
+            if (ny >= 0) {
+              G.board[ny][nx] = G.current.color;
+            }
+          }
+        }
+      }
+      clearLines();
+      G.current = newPiece();
+      if (!isValidPosition(G.current.shape, G.current.x, G.current.y)) {
+        endGame();
+      }
+    }
+
+    // Efface les lignes complètes
+    function clearLines() {
+      let cleared = 0;
+      for (let y = ROWS - 1; y >= 0; y--) {
+        if (G.board[y].every(cell => cell !== null)) {
+          G.board.splice(y, 1);
+          G.board.push(new Array(COLS).fill(null));
+          cleared++;
+          y++;
+        }
+      }
+      if (cleared > 0) {
+        G.lines += cleared;
+        G.score += [0, 100, 300, 500, 800][cleared] * G.level;
+        G.level = Math.floor(G.lines / 10) + 1;
+      }
+    }
+
+    // Dessine tout
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Dessine le plateau
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          if (G.board[y][x]) {
+            drawBlock(x, y, G.board[y][x]);
+          }
+        }
+      }
+      // Dessine la pièce actuelle
+      if (G.current) {
+        const shape = G.current.shape;
+        for (let y = 0; y < shape.length; y++) {
+          for (let x = 0; x < shape[y].length; x++) {
+            if (shape[y][x]) {
+              const px = G.current.x + x;
+              const py = G.current.y + y;
+              if (py >= 0) {
+                drawBlock(px, py, G.current.color);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Dessine un bloc
+    function drawBlock(x, y, color) {
+      const px = x * CELL;
+      const py = y * CELL;
+      ctx.fillStyle = color;
+      ctx.fillRect(px, py, CELL, CELL);
+      ctx.strokeStyle = '#0a0a1a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(px, py, CELL, CELL);
+    }
+
+    // Déplacement
+    function move(dir) {
+      if (!G.running || G.paused) return;
+      const nx = G.current.x + dir;
+      if (isValidPosition(G.current.shape, nx, G.current.y)) {
+        G.current.x = nx;
+      }
+      draw();
+    }
+
+    // Descendre
+    function softDrop() {
+      const ny = G.current.y + 1;
+      if (isValidPosition(G.current.shape, G.current.x, ny)) {
+        G.current.y = ny;
+      } else {
+        pieceLock();
+      }
+      draw();
+    }
+
+    // Rotation
+    function rotate() {
+      if (!G.running || G.paused) return;
+      const rotated = G.current.rotate();
+      // Test de rotation avec décalage
+      for (let offset = -1; offset <= 1; offset++) {
+        if (isValidPosition(rotated, G.current.x + offset, G.current.y)) {
+          G.current.shape = rotated;
+          G.current.x += offset;
+          break;
+        }
+      }
+      draw();
+    }
+
+    // Boucle de jeu
+    function gameLoop() {
+      if (G.running && !G.paused) {
+        softDrop();
+      }
+      draw();
+      setTimeout(gameLoop, Math.max(100, 1000 / G.level));
+    }
+
+    // Démarre le jeu
+    function startGame() {
+      G.running = true;
+      G.paused = false;
+      initBoard();
+      G.current = newPiece();
+      G.score = 0;
+      G.lines = 0;
+    }
+
+    // Fin de partie
+    function endGame() {
+      G.running = false;
+      alert('Jeu terminé ! Score: ' + G.score);
+    }
+
+    // Met à jour l'affichage
+    function updateHUD() {
+      document.getElementById('score').textContent = G.score;
+      document.getElementById('lines').textContent = G.lines;
+      document.getElementById('level').textContent = G.level;
+    }
+
+    // Gestion des touches
+    document.addEventListener('keydown', (e) => {
+      switch(e.key) {
+        case 'ArrowLeft': move(-1); break;
+        case 'ArrowRight': move(1); break;
+        case 'ArrowDown': softDrop(); break;
+        case 'ArrowUp': rotate(); break;
+        case ' ': if (G.running) softDrop(); break;
+        case 'p': case 'P': if (G.running) G.paused = !G.paused; break;
+      }
+    });
+
+    // Initialisation
+    document.getElementById('startBtn').addEventListener('click', () => {
+      startGame();
+      updateHUD();
+      gameLoop();
+    });
+
+    // Premier dessin
+    initBoard();
+    draw();
+  </script>
+</body>
+</html>
