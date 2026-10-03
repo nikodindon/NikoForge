@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nikoforge"
+version = "2.0.0"
+description = "Agent de coding local minimaliste pour llama-server (compatible OpenAI)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "nikodindon" }]
+license = { text = "MIT" }
+keywords = ["agent", "llm", "coding-agent", "llama.cpp", "local"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+]
+dependencies = ["openai>=1.0.0"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[project.urls]
+Repository = "https://github.com/nikodindon/NikoForge"
+Changelog = "https://github.com/nikodindon/NikoForge/blob/main/CHANGELOG.md"
+
+# NOTE phase 2 : ce bloc devient `packages = ["nikoforge"]` et un console_script
+# `nikoforge = "nikoforge.cli:main"` est ajoute (cf. ROADMAP.md phase 2).
+[tool.setuptools]
+packages = ["core"]
+
+# --------------------------------------------------------------------------- #
+# pytest
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q --strict-markers"
+markers = [
+    "known_issue: documente un comportement ACTUEL identifie comme un bug (voir docs/REFONTE.md). A inverser ou supprimer en phase 3.",
+    "integration: necessite un veritable serveur llama-server. Desactive par defaut.",
+]
+
+# --------------------------------------------------------------------------- #
+# ruff
+# Selection volontairement minimale en phase 1 : uniquement les erreurs reelles
+# (imports casses, noms indefinis, erreurs de syntaxe au niveau module).
+# La phase 6 elargit a E, W, F, I, UP, B et exige zero erreur.
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+# `examples/` contient du code de demonstration genere par l'agent : hors perimetre du produit.
+extend-exclude = ["examples"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+# --------------------------------------------------------------------------- #
+# mypy
+# Non strict en phase 1 : le code n'est pas encore annote.
+# La phase 6 resserre (check_untyped_defs, disallow_untyped_defs).
+# --------------------------------------------------------------------------- #
+[tool.mypy]
+python_version = "3.11"
+files = ["core", "nikoforge.py"]
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true

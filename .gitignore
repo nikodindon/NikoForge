@@ -23,12 +23,13 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual Environment
+# Environnements virtuels
 venv/
 env/
 ENV/
 env.bak/
 venv.bak/
+.venv/
 
 # IDE
 .vscode/
@@ -42,7 +43,7 @@ venv.bak/
 logs/
 *.log
 
-# Projects générés
+# Projets générés
 projects/
 
 # Configuration locale
@@ -52,10 +53,15 @@ config.json
 # Context sauvegardé
 *.context.json
 
-# Test coverage
+# Sessions et état local (phase 5)
+sessions/
+checkpoints/
+
+# Outils
 .coverage
 htmlcov/
 .pytest_cache/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+.ruff_cache/
