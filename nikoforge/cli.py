@@ -83,6 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument(
         "--max-iterations", type=int, metavar="N", help="allers-retours maximaux par tâche"
     )
+    common.add_argument(
+        "--stream",
+        action="store_true",
+        help="affiche chaque etape (outil, resultat, refus) au fur et a mesure",
+    )
 
     parser = argparse.ArgumentParser(
         prog=PROG,
