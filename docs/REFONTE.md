@@ -341,6 +341,42 @@ et le README laisse croire à un confinement.
 - La version `v2.0` est une chaîne en dur dans `core/ui.py:24` et `:43`, pas une constante.
 - `print_header` ouvre avec `╭…╮` et ferme avec `╰…╮` (`core/ui.py:51`) — coin incohérent.
 
+### C16 — impossible de **supprimer** du texte via l'agent
+
+`core/agent.py:250` valide les paramètres par `if not all([path, old_content, new_content])`.
+Or `all()` évalue la vérité des chaînes : une `new_content` vide est falsy, donc refusée.
+
+Conséquence : demander à l'agent de supprimer une portion de fichier est impossible au niveau
+de l'Agent. La couche `Tools`, elle, accepte très bien `new_content=""` (test
+`test_edit_file_accepts_an_empty_replacement`). La limitation est donc dans le routage, pas
+dans l'outil. Aucun message n'explique à l'utilisateur que la suppression n'est pas supportée.
+
+Découvert en écrivant la suite de tests (phase 1). Voir `test_execute_tool_cannot_delete_text`.
+
+### C17 — le code de sortie ne reflète jamais l'échec
+
+Le mode direct (`nikoforge.py`) affiche « ✓ Terminé ! » et se termine en **code 0** même quand
+le modèle est injoignable, que la boucle n'a rien produit et qu'aucun fichier n'a été touché :
+
+```
+$ python3 nikoforge.py "dis bonjour"      # serveur éteint
+✗ Erreur modèle: Connection refused
+✗ Pas de réponse du modèle
+✓ Tâche terminée
+✓ Terminé !
+$ echo $?
+0
+```
+
+Aucun script, aucun `&&`, aucune intégration continue ne peut donc détecter l'échec.
+Aggravant : en mode interactif, une fin d'entrée standard (`< /dev/null`, tube, `Ctrl+D`)
+provoque une `EOFError` non attrapée (`nikoforge.py:134` ne capture que `KeyboardInterrupt`),
+donc une trace Python. Le REPL n'est pas pilotable par un tube.
+
+Découvert en écrivant la suite de tests (phase 1). Voir
+`test_a_failed_run_still_exits_with_code_zero` et `test_interactive_mode_crashes_on_end_of_input`.
+
+
 ---
 
 ## 4. Ce qui est bon et qu'on garde
@@ -563,7 +599,7 @@ Classé par rapport valeur/effort. *✓ = retenu pour la v3.0 dans la roadmap.*
 
 ## 6. Périmètre de la v3.0
 
-**Dans le périmètre** : axes A→F, les 15 corrections de bugs, les décisions D1-D6,
+**Dans le périmètre** : axes A→F, les 17 corrections de bugs, les décisions D1-D6,
 les items « gros gains », `--plain`/`--json`, CI verte, docs réécrites, `examples/`.
 
 **Hors périmètre** (backlog 3.1+) : plan mode, parallélisation, MCP, web tools, TUI,

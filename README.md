@@ -1,5 +1,19 @@
 # 🔥 NikoForge
 
+> ⚠️ **Refonte v3.0 en cours — branche `dev`.**
+>
+> Le code de cette branche (`main`) est la **v2.0** : il fonctionne, mais un audit a
+> relevé **17 défauts reproduits**, dont un qui empêche le démarrage sans `config.json`
+> et un bug de boucle qui rend l'agent silencieusement inopérant au bout de 20 itérations.
+>
+> 📄 Analyse complète : [`docs/REFONTE.md`](docs/REFONTE.md)
+> 🗺️ Plan d'exécution : [`ROADMAP.md`](ROADMAP.md)
+> ⚖️ Arbitrages d'architecture : [`docs/DECISIONS.md`](docs/DECISIONS.md)
+>
+> **Les instructions d'installation ci-dessous ne seront valables que jusqu'à la phase 2.**
+> D'ici là, elles décrivent le montage manuel de la v2 (venv + copie de `config.example.json`).
+
+
 **Ton propre Pi.dev / QwenCode local — puissant, minimal et autonome.**
 
 Un agent de coding intelligent qui transforme du **langage naturel** en projets complets et fonctionnels, en utilisant tes modèles locaux (actuellement Qwen3.6-35B-A3B).

@@ -39,25 +39,45 @@ Légende : `[ ]` à faire · `[x]` fait · `[~]` en cours
 
 ## Phase 1 — Hygiène et filet de sécurité
 
-*0,5 j — 0 fonctionnalité ajoutée*
+*0,5 j — 0 fonctionnalité ajoutée — terminée*
 
-- [ ] Purger les débris de la racine : `run.py`, `run.sh`, `run_test.sh`, `test.py`, `test.txt`,
+- [x] Purger les débris de la racine : `run.py`, `run.sh`, `run_test.sh`, `test.py`, `test.txt`,
       `xmltest.py`, `bonjour.py`, `hello.py`, `index.html`.
-- [ ] Déplacer `calculatrice/` et `asteroid_dodge/` → `examples/`.
-- [ ] Supprimer `test_parser.py` et `test_tools.py` (remplacés par `tests/`).
-- [ ] Ajouter `LICENSE` (selon D4), `CHANGELOG.md`, `.editorconfig`.
-- [ ] `pyproject.toml` minimal : métadonnées PEP 621, `[dev]` = `pytest`, `ruff`, `mypy`.
-- [ ] `tests/` : **golden tests** qui capturent le comportement *actuel* — parser XML sur cas
-      simples, `Tools.read_file/write_file/edit_file/list_files` sur `tmp_path`, `ContextManager`.
-      Ces tests documentent l'existant : certains seront adaptés ou supprimés en phase 3, c'est
-      normal et attendu.
-- [ ] Compléter `.gitignore` : `sessions/`, `dist/`, `.mypy_cache/`, `*.egg-info/`.
-- [ ] `README.md` : ajouter un bandeau « refonte v3.0 en cours sur `dev` » en tête.
+- [x] Déplacer `calculatrice/` et `asteroid_dodge/` → `examples/` (+ `examples/README.md`).
+- [x] Supprimer `test_parser.py` et `test_tools.py` (remplacés par `tests/`).
+- [x] Ajouter `LICENSE` (MIT, selon D4), `CHANGELOG.md`, `.editorconfig`.
+- [x] `pyproject.toml` minimal : métadonnées PEP 621, `[dev]` = `pytest`, `ruff`, `mypy`,
+      configuration des trois outils, marqueur `known_issue` enregistré.
+      `pip install -e ".[dev]"` fonctionne.
+- [x] `tests/` : **golden tests** qui capturent le comportement *actuel*.
+      Résultat : **135 tests, tous verts**, dont 21 marqués `known_issue`.
+- [x] Compléter `.gitignore` : `sessions/`, `checkpoints/`, `dist/`, `.venv/`, `.mypy_cache/`,
+      `.ruff_cache/`, `*.egg-info/`.
+- [x] `README.md` : bandeau « refonte v3.0 en cours sur `dev` » en tête.
+- [x] Passe d'hygiène : 12 signalements `ruff` corrigés (imports morts, f-strings sans
+      placeholder, variable assignée inutilisée). `ruff` et `mypy` sont **verts** alors que
+      la phase 6 ne l'exigeait pas encore.
+- [x] Deux défauts supplémentaires découverts en écrivant les tests, documentés
+      (`docs/REFONTE.md` C16 et C17) et replacés dans les phases 3 et 5.
 
 **Débloque** : rien fonctionnellement.
 **Corrige** : B4, B5 (partiellement), dette de dépôt.
-**Critère de sortie** : `git status` propre, `pytest` passe (au moins 8 tests), `ls` à la racine
-ne montre plus que des fichiers du produit. Le code se comporte exactement comme avant.
+**Critère de sortie** — atteint :
+
+```
+$ .venv/bin/python -m pytest
+135 passed in 48.02s
+$ .venv/bin/ruff check .
+All checks passed!
+$ .venv/bin/mypy
+Success: no issues found in 7 source files
+$ git status --short
+(vide, hors fichiers ignorés)
+```
+
+`ls` à la racine ne montre plus que des fichiers du produit. Le code se comporte exactement
+comme avant (aucune modification de comportement : seuls des imports morts et deux préfixes
+`f` ont été retirés).
 
 ---
 
@@ -125,6 +145,8 @@ ne montre plus que des fichiers du produit. Le code se comporte exactement comme
       **Corrige C3.**
 - [ ] Politique d'approbation **avant** exécution, par outil. **Corrige C9.**
 - [ ] Annulation propre en cours de tour.
+- [ ] Validation des paramètres par **schéma** (et non par `all([...])` sur des chaînes) :
+      `edit_file(path, "", "")` doit être accepté pour supprimer du texte. **Corrige C16.**
 
 ### 3.4 `context.py`
 - [ ] Tokens réels issus de `llm.py` ; `len // 4` supprimé. **Corrige C7b.**
@@ -191,6 +213,8 @@ ne montre plus que des fichiers du produit. Le code se comporte exactement comme
       `~/.local/state/nikoforge/checkpoints/` → `/undo` restaure.
 - [ ] `--dry-run` (montre sans exécuter), `--yes` (auto-approbation), `--json`.
 - [ ] Ctrl+C = arrêt **du tour**, pas du process (`/stop` en équivalent slash).
+- [ ] **Codes de sortie exploitables** : une tâche qui échoue sort en code ≠ 0 ; `Ctrl+D` et
+      `</dev/null` terminent proprement au lieu de lever `EOFError`. **Corrige C17.**
 
 **Critère de sortie** :
 1. Lancer une tâche, `kill` en plein milieu, relancer avec `-c` → la session reprend.
@@ -241,8 +265,8 @@ environnement vierge, et `nikoforge doctor` est entièrement vert.
 
 | Phase | Statut | Commits | Date |
 |---|---|---|---|
-| 0 — Cadrage | `[~]` | | |
-| 1 — Hygiène | `[ ]` | | |
+| 0 — Cadrage | `[~]` | 2 | 2026-10-03 |
+| 1 — Hygiène | `[x]` | 4 | 2026-10-03 |
 | 2 — Installation | `[ ]` | | |
 | 3 — Cœur fiable | `[ ]` | | |
 | 4 — Outillage | `[ ]` | | |
@@ -277,3 +301,5 @@ de route sans dériver la phase en cours.
 | Date | Événement |
 |---|---|
 | 2026-10-03 | Audit complet du dépôt (`139c001`). 15 bugs reproduits, 5 bloquants identifiés. Branche `dev` créée. `docs/REFONTE.md` et `ROADMAP.md` écrits. |
+| 2026-10-03 | `docs/DECISIONS.md` créé. D4/D5/D6 retenus, D1/D2/D3 proposés (en attente). |
+| 2026-10-03 | **Phase 1 terminée.** Dépôt purgé (11 fichiers supprimés, 2 dossiers déplacés), `pyproject.toml` + `LICENSE` + `CHANGELOG.md` + `.editorconfig` ajoutés, suite de **135 tests** créée (21 `known_issue`). `pytest`, `ruff` et `mypy` verts. 2 bugs supplémentaires découverts (C16, C17) → 17 au total. |
