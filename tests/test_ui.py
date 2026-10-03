@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from core import ui as ui_module
-from core.ui import NikoForgeUI
+from nikoforge import ui as ui_module
+from nikoforge.ui import NikoForgeUI
 
 
 # --------------------------------------------------------------------------- #

@@ -4,8 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nikoforge"
-version = "2.0.0"
-description = "Agent de coding local minimaliste pour llama-server (compatible OpenAI)"
+description = "Agent de coding local, exécuté sur un serveur compatible OpenAI (llama-server)"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "nikodindon" }]
@@ -22,22 +21,29 @@ classifiers = [
     "Topic :: Software Development :: Code Generators",
 ]
 dependencies = ["openai>=1.0.0"]
+# Source unique de vérité pour la version : `nikoforge/__init__.py`.
+dynamic = ["version"]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
     "mypy>=1.11",
+    "httpx>=0.27",  # client de test pour le faux serveur OpenAI-compatible
 ]
+
+[project.scripts]
+nikoforge = "nikoforge.cli:main"
 
 [project.urls]
 Repository = "https://github.com/nikodindon/NikoForge"
 Changelog = "https://github.com/nikodindon/NikoForge/blob/main/CHANGELOG.md"
 
-# NOTE phase 2 : ce bloc devient `packages = ["nikoforge"]` et un console_script
-# `nikoforge = "nikoforge.cli:main"` est ajoute (cf. ROADMAP.md phase 2).
 [tool.setuptools]
-packages = ["core"]
+packages = ["nikoforge"]
+
+[tool.setuptools.dynamic]
+version = { attr = "nikoforge.__version__" }
 
 # --------------------------------------------------------------------------- #
 # pytest
@@ -48,13 +54,13 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q --strict-markers"
 markers = [
-    "known_issue: documente un comportement ACTUEL identifie comme un bug (voir docs/REFONTE.md). A inverser ou supprimer en phase 3.",
+    "known_issue: documente un comportement identifie comme un bug (voir docs/REFONTE.md). A inverser ou supprimer en phase 3.",
     "integration: necessite un veritable serveur llama-server. Desactive par defaut.",
 ]
 
 # --------------------------------------------------------------------------- #
 # ruff
-# Selection volontairement minimale en phase 1 : uniquement les erreurs reelles
+# Selection volontairement minimale en phase 2 : uniquement les erreurs reelles
 # (imports casses, noms indefinis, erreurs de syntaxe au niveau module).
 # La phase 6 elargit a E, W, F, I, UP, B et exige zero erreur.
 # --------------------------------------------------------------------------- #
@@ -69,12 +75,12 @@ select = ["E4", "E7", "E9", "F"]
 
 # --------------------------------------------------------------------------- #
 # mypy
-# Non strict en phase 1 : le code n'est pas encore annote.
+# Non strict en phase 2 : le code n'est pas encore annote.
 # La phase 6 resserre (check_untyped_defs, disallow_untyped_defs).
 # --------------------------------------------------------------------------- #
 [tool.mypy]
 python_version = "3.11"
-files = ["core", "nikoforge.py"]
+files = ["nikoforge"]
 ignore_missing_imports = true
 warn_unused_configs = true
 warn_redundant_casts = true

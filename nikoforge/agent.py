@@ -2,52 +2,75 @@
 Boucle principale de l'agent NikoForge
 """
 
+import dataclasses
 import json
-from typing import Optional, Dict, Any
-from pathlib import Path
+from typing import Any, Dict, Optional
 
 try:
     from openai import OpenAI
 except ImportError:  # pragma: no cover - dépendance déclarée dans pyproject.toml
     OpenAI = None  # type: ignore[assignment,misc]
 
-from .tools import Tools, ToolResult, format_tool_result
+from .config import Config
 from .context import ContextManager
 from .prompt import get_system_prompt
+from .server import pick_model, probe
+from .tools import ToolResult, Tools, format_tool_result
 
 
 class Agent:
     """Agent de coding principal"""
 
-    def __init__(self, config_path: str = "config.json"):
-        self.config = self._load_config(config_path)
-        self.tools = Tools(base_dir=".")
+    def __init__(self, config: Config):
+        self.config = config
+        self.tools = Tools(base_dir=str(config.workdir))
         self.context = ContextManager(
-            max_tokens=self.config["context"]["max_tokens"],
-            compaction_threshold=self.config["context"]["compaction_threshold"]
+            max_tokens=config.context.max_tokens,
+            compaction_threshold=config.context.compaction_threshold,
         )
         self.client = self._init_client()
         self.iteration = 0
-        self.max_iterations = self.config["agent"]["max_iterations"]
-
-    def _load_config(self, config_path: str) -> Dict[str, Any]:
-        """Charge la configuration"""
-        config_file = Path(config_path)
-        if not config_file.exists():
-            raise FileNotFoundError(f"Configuration non trouvée: {config_path}")
-
-        with open(config_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        self.max_iterations = config.agent.max_iterations
+        #: Renseigné au premier appel quand la configuration laisse le modèle vide.
+        self._model: Optional[str] = config.llm.model or None
 
     def _init_client(self):
-        """Initialise le client OpenAI"""
+        """Initialise le client OpenAI."""
         if OpenAI is None:
-            raise ImportError("openai package non installé. Installez-le avec: pip install openai")
+            raise ImportError(
+                "le paquet `openai` est requis. Installez-le : pip install openai"
+            )
 
         return OpenAI(
-            base_url=self.config["llm"]["base_url"],
-            api_key=self.config["llm"]["api_key"]
+            base_url=self.config.llm.base_url,
+            api_key=self.config.llm.api_key,
+            # 0 = pas de limite : le client distingue 0.0 (« attendre 0 s ») de None.
+            timeout=self.config.llm.timeout or None,
         )
+
+    def _resolve_model(self) -> str:
+        """Détermine le nom du modèle, en le découvrant auprès du serveur si nécessaire.
+
+        C'est ce qui permet à ``nikoforge`` de fonctionner sans **aucune** configuration :
+        llama-server annonce le GGUF chargé sur ``GET /v1/models``.
+        """
+        if self._model:
+            return self._model
+
+        result = probe(self.config.llm.base_url)
+        model, _ = pick_model(result)
+        if model is None:
+            raise RuntimeError(
+                "aucun modèle : le serveur n'annonce rien sur /v1/models. "
+                "Précisez le nom avec --model ou llm.model dans la configuration."
+            )
+
+        self._model = model
+        # Reflète la découverte dans la configuration affichée par les statistiques.
+        self.config = dataclasses.replace(
+            self.config, llm=dataclasses.replace(self.config.llm, model=model)
+        )
+        return model
 
     def run(self, user_message: str, interactive: bool = False) -> str:
         """Exécute l'agent avec un message utilisateur"""
@@ -64,7 +87,7 @@ class Agent:
             # Vérifier si on doit compacter le contexte
             if self.context.needs_compaction():
                 print("⚠️  Contexte trop grand, compaction en cours...")
-                self.context.compact(summary_tokens=self.config["context"]["summary_tokens"])
+                self.context.compact(summary_tokens=self.config.context.summary_tokens)
                 print(f"✓ Contexte compacté (résumé: {len(self.context.summary)} chars)")
 
             # Obtenir la réponse du modèle
@@ -121,12 +144,11 @@ class Agent:
             print("🤖 En attente de la réponse du modèle...", end="", flush=True)
 
             response = self.client.chat.completions.create(
-                model=self.config["llm"]["model"],
+                model=self._resolve_model(),
                 messages=messages,
-                temperature=self.config["llm"]["temperature"],
-                max_tokens=self.config["llm"]["max_tokens"],
-                timeout=self.config["llm"]["timeout"],
-                stream=True  # 🔥 Streaming activé !
+                temperature=self.config.llm.temperature,
+                max_tokens=self.config.llm.max_tokens,
+                stream=True,  # 🔥 Streaming activé !
             )
 
             # Extraire le contenu avec streaming
@@ -253,13 +275,13 @@ class Agent:
 
             elif tool_name == "bash":
                 command = params.get("command") or params.get("raw")
-                timeout = params.get("timeout") or self.config["agent"]["tool_timeout"]
+                timeout = params.get("timeout") or self.config.agent.tool_timeout
                 # Convertir timeout en int si c'est une string
                 if isinstance(timeout, str):
                     try:
                         timeout = int(timeout)
                     except ValueError:
-                        timeout = self.config["agent"]["tool_timeout"]
+                        timeout = self.config.agent.tool_timeout
                 if not command:
                     return ToolResult(False, None, "Paramètre 'command' manquant")
                 return self.tools.bash(command, timeout)

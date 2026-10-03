@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.tools import ToolResult, format_tool_result
+from nikoforge.tools import ToolResult, format_tool_result
 
 
 # --------------------------------------------------------------------------- #

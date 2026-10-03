@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from core.context import ContextManager
+from nikoforge.context import ContextManager
 
 
 @pytest.fixture()

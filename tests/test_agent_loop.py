@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from core.tools import Tools
+from nikoforge.agent import Agent
 
 
 # --------------------------------------------------------------------------- #
@@ -73,21 +73,18 @@ def tool_calls_xml(name: str, **params: str) -> str:
 
 
 @pytest.fixture()
-def sandbox(tmp_path: Path) -> Path:
-    """Dossier de travail de l'agent, distinct de ``tmp_path``.
+def sandbox(workdir: Path) -> Path:
+    """Répertoire de travail de l'agent.
 
-    ``conftest`` écrit ``config.json`` dans ``tmp_path`` : si l'agent travaillait directement
-    là, ``list_files(".")`` verrait ce fichier de configuration.
+    Il est déjà isolé : la fixture ``config`` de ``conftest`` y place ``Config.workdir``,
+    et l'``Agent`` construit son ``Tools`` avec ce répertoire.
     """
-    path = tmp_path / "workdir"
-    path.mkdir()
-    return path
+    return workdir
 
 
 @pytest.fixture()
-def sandboxed_agent(agent, sandbox):
-    """Un agent dont l'outil ``Tools`` est confiné : la boucle n'écrit pas dans le dépôt."""
-    agent.tools = Tools(base_dir=str(sandbox))
+def sandboxed_agent(agent: Agent) -> Agent:
+    """Un agent confiné dans ``tmp_path`` : la boucle n'écrit jamais dans le dépôt."""
     return agent
 
 
