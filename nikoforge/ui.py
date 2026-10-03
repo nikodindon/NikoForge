@@ -97,6 +97,13 @@ class NikoForgeUI:
         if stats['context_stats']['compaction_count'] > 0:
             print(f"  • Compactions: {stats['context_stats']['compaction_count']}")
 
+    # /undo : restaure le dernier checkpoint (phase 5)
+    @staticmethod
+    def undo(path: str):
+        cp = CHECKPOINT_DIR + "/" + path.replace("/", "_") + ".json"
+        # Le comportement complet (lire le checkpoint, restaurer) est en cours.
+        return os.path.exists(cp)
+
     @staticmethod
     def render_mode() -> str:
         """Retourne le mode d'affichage : plain (pas d'emoji/ANSI), rich (TTY), json (NDJSON)."""
@@ -104,9 +111,7 @@ class NikoForgeUI:
 
     # Session : persistance JSONL append-only (ROADMAP.md phase 5)
     SESSION_DIR = "~/.local/share/nikoforge/sessions"
-    CHECKPOINT_DIR = "~/.local/state/nikoforge/checkpoints" ; ce stub
-        # expose le contrat, qui est testé par test_ui.py en phase 6.
-        return "rich"
+    CHECKPOINT_DIR = "/home/niko/.local/state/nikoforge/checkpoints"
 
     @staticmethod
     def print_help():
