@@ -161,6 +161,47 @@ def test_options_are_not_taken_for_a_prompt():
 
 
 # --------------------------------------------------------------------------- #
+# Options et sous-commandes (régression : argparse et l'espace de noms)
+# --------------------------------------------------------------------------- #
+
+
+def test_an_option_placed_before_the_subcommand_is_not_lost(home, fake_server, capsys):
+    """Régression : depuis Python 3.9, argparse recopie les **défauts** du sous-parser dans
+    l'espace de noms du parent.
+
+    Conséquence observée en usage réel : `nikoforge --base-url http://ailleurs doctor`
+    interrogeait 127.0.0.1 et ignorait l'option. Corrigé par ``argument_default=SUPPRESS``.
+    """
+    assert main(["--base-url", fake_server.base_url, "doctor"]) == EXIT_OK
+
+    out = capsys.readouterr().out
+    assert fake_server.base_url in out
+    assert "127.0.0.1:8080" not in out
+
+
+def test_an_option_placed_after_the_subcommand_also_works(home, fake_server, capsys):
+    assert main(["doctor", "--base-url", fake_server.base_url]) == EXIT_OK
+    assert fake_server.base_url in capsys.readouterr().out
+
+
+def test_workdir_before_the_subcommand_is_not_lost(home, tmp_path, capsys):
+    assert main(["--cwd", str(tmp_path), "doctor"]) == EXIT_FAILURE  # serveur injoignable
+
+    assert str(tmp_path) in capsys.readouterr().out
+
+
+def test_an_option_before_the_subcommand_changes_the_verdict(home, capsys):
+    """La même sous-commande, deux verdicts : c'est le signe que l'option est bien prise."""
+    assert main(["--base-url", UNREACHABLE_BASE_URL, "doctor"]) == EXIT_FAILURE
+    assert "✖ serveur" in capsys.readouterr().out
+
+
+def test_model_override_reaches_print_config(home, capsys):
+    assert main(["--model", "choisi-a-la-main", "--print-config"]) == EXIT_OK
+    assert 'model = "choisi-a-la-main"' in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------- #
 # Configuration
 # --------------------------------------------------------------------------- #
 
@@ -404,21 +445,22 @@ def test_the_system_prompt_is_sent_first(home, fake_server, monkeypatch, capsys)
 
     messages = fake_server.last_messages()
     assert messages[0]["role"] == "system"
-    assert messages[1] == {"role": "user", "content": "dis bonjour", "timestamp": messages[1]["timestamp"]}
+    assert "NikoForge" in messages[0]["content"]
+    # Seuls `role` et `content` partent au serveur : les champs internes (horodatage) restent
+    # dans l'historique local et ne consomment pas de contexte.
+    assert messages[1] == {"role": "user", "content": "dis bonjour"}
 
 
-@pytest.mark.known_issue
 def test_an_empty_model_answer_exits_non_zero(home, fake_server, monkeypatch, capsys):
-    """C17 (partie « code de sortie ») : la v2 sortait toujours en 0, même sans réponse.
-
-    Ici, une réponse vide du modèle devient un échec visible — ce qui permet à un script de
-    détecter le problème. La partie « échec en cours de tour » reste à faire en phase 5.
-    """
+    """La v2 sortait toujours en 0, même sans réponse : un script ne pouvait rien détecter."""
     fake_server.replies = [""]
     monkeypatch.setenv("NIKOFORGE_BASE_URL", fake_server.base_url)
 
     assert main(["-p", "dis bonjour"]) == EXIT_FAILURE
-    assert "aucune réponse du modèle" in capsys.readouterr().out
+
+    out = capsys.readouterr().out
+    assert "le modèle n'a rien produit" in out
+    assert "0 itération" in out or "1 itération" in out
 
 
 def test_a_positional_prompt_still_works_with_a_deprecation_notice(

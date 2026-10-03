@@ -38,6 +38,8 @@ ENV_VARS: dict[str, tuple[str, str]] = {
     "NIKOFORGE_TEMPERATURE": ("llm", "temperature"),
     "NIKOFORGE_MAX_TOKENS": ("llm", "max_tokens"),
     "NIKOFORGE_TIMEOUT": ("llm", "timeout"),
+    "NIKOFORGE_PROTOCOL": ("llm", "protocol"),
+    "NIKOFORGE_ENABLE_THINKING": ("llm", "enable_thinking"),
     "NIKOFORGE_CONTEXT": ("context", "max_tokens"),
     "NIKOFORGE_COMPACTION_THRESHOLD": ("context", "compaction_threshold"),
     "NIKOFORGE_SUMMARY_TOKENS": ("context", "summary_tokens"),
@@ -47,6 +49,11 @@ ENV_VARS: dict[str, tuple[str, str]] = {
 
 #: Valeurs textuelles interprétées comme « pas de limite » (0) pour un champ numérique.
 _NO_LIMIT_LITERALS = {"", "none", "null", "unlimited"}
+
+#: Champs à valeurs fermées : une faute de frappe doit être signalée, pas interprétée.
+CHOICES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("llm", "protocol"): ("auto", "native", "text"),
+}
 
 
 class ConfigError(Exception):
@@ -73,6 +80,14 @@ class LLMConfig:
     #: ``0`` signifie « pas de limite » — TOML n'ayant pas de valeur nulle, c'est la seule
     #: façon d'exprimer cela dans le fichier, et c'est plus lisible que ``null``.
     timeout: float = 300.0
+    #: ``auto`` = protocole natif si le serveur l'annonce (``/props``), textuel sinon.
+    #: ``native`` et ``text`` forcent l'un ou l'autre.
+    protocol: str = "auto"
+    #: Séquences d'arrêt transmises au serveur.
+    stop: list[str] = field(default_factory=list)
+    #: Certains modèles (Qwen3) consomment beaucoup de contexte en réflexion. Désactivée par
+    #: défaut : le raisonnement est alors conservé à part au lieu d'être renvoyé au modèle.
+    enable_thinking: bool = False
 
 
 @dataclass(frozen=True)
@@ -127,6 +142,9 @@ FIELD_COMMENTS: dict[tuple[str, str], str] = {
     ("llm", "temperature"): "0.0 = deterministe, 1.0 = creatif",
     ("llm", "max_tokens"): "Longueur maximale d'une reponse du modele",
     ("llm", "timeout"): "Delai maximal en secondes. 0 = pas de limite",
+    ("llm", "protocol"): "auto = natif si le serveur l'annonce, sinon textuel (auto|native|text)",
+    ("llm", "stop"): "Sequences d'arret envoyees au serveur",
+    ("llm", "enable_thinking"): "false = raisonnement desactive et garde a part",
     ("context", "max_tokens"): "Fenetre de contexte annoncee par le serveur",
     ("context", "compaction_threshold"): "Fraction de max_tokens declenchant la compaction",
     ("context", "summary_tokens"): "Taille visee pour le resume de compaction",
@@ -223,6 +241,20 @@ def _coerce(value: Any, hint: Any, where: str) -> Any:
     Nécessaire parce que les variables d'environnement sont toujours des chaînes, alors que
     le TOML apporte déjà les bons types.
     """
+    origin = typing.get_origin(hint)
+
+    if origin is list:
+        arguments = typing.get_args(hint)
+        inner = arguments[0] if arguments else str
+        if isinstance(value, str):
+            # Une variable d'environnement ne peut porter qu'une valeur : on l'accepte seule.
+            return [_coerce(value, inner, f"{where}[0]")]
+        if not isinstance(value, (list, tuple)):
+            raise ConfigError(
+                f"{where} : liste attendue, reçu {type(value).__name__}"
+            )
+        return [_coerce(item, inner, f"{where}[{index}]") for index, item in enumerate(value)]
+
     try:
         if hint is bool:
             if isinstance(value, bool):
@@ -240,6 +272,17 @@ def _coerce(value: Any, hint: Any, where: str) -> Any:
         raise ConfigError(f"{where} : valeur invalide {value!r} ({exc})") from exc
 
     return value
+
+
+def _check_choices(section: str, values: Mapping[str, Any]) -> None:
+    for (candidate_section, key), allowed in CHOICES.items():
+        if candidate_section != section or key not in values:
+            continue
+        if values[key] not in allowed:
+            raise ConfigError(
+                f"[{section}] {key} : {values[key]!r} invalide. "
+                f"Valeurs acceptées : {', '.join(allowed)}"
+            )
 
 
 def _section_types(section: str) -> dict[str, Any]:
@@ -264,6 +307,7 @@ def _merge_section(section: str, data: Any) -> Any:
     kwargs = {
         key: _coerce(value, hints[key], f"[{section}] {key}") for key, value in data.items()
     }
+    _check_choices(section, kwargs)
     return cls(**kwargs)
 
 
@@ -333,6 +377,7 @@ def apply_overrides(config: Config, overrides: Mapping[str, Any] | None) -> Conf
         if unknown:
             raise ConfigError(f"override inconnu dans {key} : {', '.join(unknown)}")
         coerced = {k: _coerce(v, hints[k], f"{key}.{k}") for k, v in values.items()}
+        _check_choices(key, coerced)
         sections[key] = dataclasses.replace(sections[key], **coerced)
         changed = True
 
