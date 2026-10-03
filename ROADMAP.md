@@ -330,7 +330,7 @@ environnement vierge, et `nikoforge doctor` est entièrement vert.
 | 2 — Installation | `[x]` | 6 | 2026-10-03 |
 | 3 — Cœur fiable | `[x]` | 4 | 2026-10-03 |
 | 4 — Outillage | `[ ]` | | |
-|| 5 — UX et observabilité | `[~]` | 1 | 2026-10-03 |
+|| 5 — UX et observabilité | `[x]` | 3 | 2026-10-03 |
 || 6 — Qualité et CI | `[~]` | 0 | 2026-10-03 |
 | 7 — Publication | `[ ]` | | |
 
